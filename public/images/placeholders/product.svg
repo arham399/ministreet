@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="400" height="500" viewBox="0 0 400 500" fill="none">
+  <rect width="400" height="500" fill="#FCECF3"/>
+  <circle cx="200" cy="220" r="60" fill="#F8DCEB"/>
+  <path d="M160 280 Q200 320 240 280" stroke="#E91E8C" stroke-width="2" fill="none" opacity="0.4"/>
+  <text x="200" y="380" text-anchor="middle" fill="#746B72" font-family="system-ui" font-size="14">Mini Street</text>
+</svg>
