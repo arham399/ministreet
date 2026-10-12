@@ -116,3 +116,8 @@ npm run db:studio
 npm run typecheck
 npm run test
 ```
+
+The default Prisma commands use the Supabase PostgreSQL schema at
+`prisma/postgresql/schema.prisma`. Configure `DATABASE_URL` and `DIRECT_URL`
+before generating the client or running migrations. The root SQLite schema and
+migrations are retained only as a legacy local-data reference.

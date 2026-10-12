@@ -18,8 +18,8 @@ export default async function HomePage() {
     bestSellers = bs.products;
   } catch {
     newArrivals = [
-      { id: "1", name: "Pearl Drop Earrings", slug: "pearl-drop-earrings", price: 1599, salePrice: 1299, imageUrl: null, isNewArrival: true, stockQuantity: 25, averageRating: null },
-      { id: "2", name: "Golden Heart Bracelet", slug: "golden-heart-bracelet", price: 1899, salePrice: 1499, imageUrl: null, isNewArrival: true, stockQuantity: 18, averageRating: null },
+      { id: "1", name: "Pearl Drop Earrings", slug: "pearl-drop-earrings", price: 1599, salePrice: 1299, imageUrl: "", isNewArrival: true, stockQuantity: 25, averageRating: null, categorySlug: undefined },
+      { id: "2", name: "Golden Heart Bracelet", slug: "golden-heart-bracelet", price: 1899, salePrice: 1499, imageUrl: "", isNewArrival: true, stockQuantity: 18, averageRating: null, categorySlug: undefined },
     ];
     bestSellers = newArrivals;
   }

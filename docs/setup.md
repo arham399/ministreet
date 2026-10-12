@@ -17,6 +17,11 @@ Set `DATABASE_URL` to the Supabase transaction-pooler URL (port 6543)
 and `DIRECT_URL` to the session-pooler URL (port 5432). Also set the
 application secret and owner credentials in `.env`.
 
+The app uses Prisma with Supabase PostgreSQL; it does not use Supabase Auth.
+Keep database credentials and any future Supabase service-role key server-side.
+Payment-proof uploads are not enabled yet; when implemented, they must use a
+private Supabase Storage bucket rather than a public URL.
+
 Generate a secret:
 
 ```bash

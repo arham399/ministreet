@@ -42,7 +42,7 @@ export async function uploadImage(
   const signature = crypto.createHash("sha1").update(toSign).digest("hex");
 
   const form = new FormData();
-  form.append("file", new Blob([buffer]), filename);
+  form.append("file", new Blob([new Uint8Array(buffer)]), filename);
   form.append("api_key", apiKey);
   form.append("timestamp", String(timestamp));
   form.append("signature", signature);
