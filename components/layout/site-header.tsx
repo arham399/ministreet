@@ -1,12 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import Image from "next/image";
 import { useState, useEffect } from "react";
 import { Search, Heart, ShoppingBag, Menu, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CATEGORIES } from "@/lib/constants";
 import { useCartStore } from "@/lib/cart/store";
+import { useWishlistStore } from "@/lib/cart/wishlist-store";
 
 const NAV = [
   { label: "Shop", href: "/shop" },
@@ -20,6 +20,7 @@ export function SiteHeader() {
   const [mounted, setMounted] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const count = useCartStore((s) => s.getCount());
+  const wishlistCount = useWishlistStore((s) => s.items.length);
 
   useEffect(() => {
     setMounted(true);
@@ -40,31 +41,25 @@ export function SiteHeader() {
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div
           className={cn(
-            "flex items-center justify-between gap-4 transition-all duration-300",
+            "flex items-center justify-between gap-0 transition-all duration-300 sm:gap-4",
             scrolled ? "h-14" : "h-16"
           )}
         >
-          <button
-            className="lg:hidden p-2 -ml-2 rounded-[var(--radius-sm)] hover:bg-[var(--brand-blush)] transition-colors"
-            onClick={() => setMobileOpen(!mobileOpen)}
-            aria-label={mobileOpen ? "Close menu" : "Open menu"}
-          >
-            {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-          </button>
+          <div className="flex shrink-0 items-center">
+            <button
+              className="lg:hidden p-2 pr-0 -ml-2 rounded-[var(--radius-sm)] hover:bg-[var(--brand-blush)] transition-colors"
+              onClick={() => setMobileOpen(!mobileOpen)}
+              aria-label={mobileOpen ? "Close menu" : "Open menu"}
+            >
+              {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+            </button>
 
-          <Link href="/" className="flex items-center shrink-0">
-            <Image
-              src="/brand/logo.png"
-              alt="Mini Street"
-              width={120}
-              height={48}
-              className={cn(
-                "w-auto object-contain transition-all duration-300",
-                scrolled ? "h-8" : "h-10"
-              )}
-              priority
-            />
-          </Link>
+            <Link href="/" className="flex items-center">
+              <span className="font-serif text-[22px] font-black leading-none tracking-[-0.055em] text-[var(--brand-pink)] transition-all duration-300 sm:text-2xl">
+                MINI STREET
+              </span>
+            </Link>
+          </div>
 
           <nav className="hidden lg:flex items-center gap-7">
             {NAV.map((item) => (
@@ -95,10 +90,7 @@ export function SiteHeader() {
           </nav>
 
           <div className="flex items-center gap-0.5 sm:gap-1">
-            {[
-              { href: "/search", icon: Search, label: "Search" },
-              { href: "/wishlist", icon: Heart, label: "Wishlist" },
-            ].map(({ href, icon: Icon, label }) => (
+            {[{ href: "/search", icon: Search, label: "Search" }].map(({ href, icon: Icon, label }) => (
               <Link
                 key={href}
                 href={href}
@@ -108,6 +100,18 @@ export function SiteHeader() {
                 <Icon className="h-[18px] w-[18px]" strokeWidth={1.75} />
               </Link>
             ))}
+            <Link
+              href="/wishlist"
+              className="relative rounded-full p-2.5 transition-colors duration-200 hover:bg-[var(--brand-blush)]"
+              aria-label={wishlistCount > 0 ? `Wishlist, ${wishlistCount} saved` : "Wishlist"}
+            >
+              <Heart className="h-[18px] w-[18px]" strokeWidth={1.75} />
+              {mounted && wishlistCount > 0 && (
+                <span className="absolute right-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-[var(--brand-pink)] px-1 text-[9px] font-bold text-white shadow-soft">
+                  {wishlistCount > 99 ? "99+" : wishlistCount}
+                </span>
+              )}
+            </Link>
             <Link
               href="/cart"
               className="relative p-2.5 rounded-full hover:bg-[var(--brand-blush)] transition-colors duration-200"

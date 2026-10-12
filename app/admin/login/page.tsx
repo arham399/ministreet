@@ -38,6 +38,11 @@ export default function AdminLoginPage() {
           Mini Street
         </h1>
         <p className="text-center text-sm text-[var(--muted)] mb-6">Admin sign in</p>
+        {params.get("credentialsUpdated") === "1" && (
+          <p role="status" className="mb-4 text-sm text-green-700">
+            Sign-in details updated. Please sign in with your new credentials.
+          </p>
+        )}
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-sm font-medium mb-1.5" htmlFor="email">Email</label>

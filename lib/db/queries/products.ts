@@ -1,5 +1,9 @@
 import { prisma } from "@/lib/db/prisma";
 import type { Prisma } from "@prisma/client";
+import {
+  applyAutomaticDiscounts,
+} from "@/lib/discounts/apply-automatic-discounts";
+import { getActiveAutomaticDiscounts } from "@/lib/discounts/queries";
 
 export type ProductListFilters = {
   category?: string;
@@ -14,10 +18,28 @@ export type ProductListFilters = {
   limit?: number;
 };
 
+export async function getProductPriceCeiling(category?: string) {
+  const result = await prisma.product.aggregate({
+    where: {
+      isActive: true,
+      archivedAt: null,
+      ...(category ? { category: { slug: category } } : {}),
+    },
+    _max: { price: true },
+  });
+  return Math.max(1, Math.ceil(Number(result._max.price ?? 0)));
+}
+
 export async function getProducts(filters: ProductListFilters = {}) {
   const page = filters.page ?? 1;
   const limit = filters.limit ?? 24;
   const skip = (page - 1) * limit;
+  const priceSensitive =
+    filters.minPrice != null ||
+    filters.maxPrice != null ||
+    filters.onSale === true ||
+    filters.sort === "price-low" ||
+    filters.sort === "price-high";
 
   const where: Prisma.ProductWhereInput = {
     isActive: true,
@@ -27,32 +49,24 @@ export async function getProducts(filters: ProductListFilters = {}) {
   if (filters.category) {
     where.category = { slug: filters.category };
   }
+  const conditions: Prisma.ProductWhereInput[] = [];
   if (filters.q) {
-    where.OR = [
-      { name: { contains: filters.q } },
-      { description: { contains: filters.q } },
-      { tags: { some: { name: filters.q.toLowerCase() } } },
-    ];
+    conditions.push({
+      OR: [
+        { name: { contains: filters.q } },
+        { description: { contains: filters.q } },
+        { tags: { some: { name: filters.q.toLowerCase() } } },
+      ],
+    });
   }
   if (filters.inStock) {
     where.stockQuantity = { gt: 0 };
   }
-  if (filters.onSale) {
-    where.salePrice = { not: null };
-  }
   if (filters.newArrival) {
     where.isNewArrival = true;
   }
-  if (filters.minPrice != null || filters.maxPrice != null) {
-    where.OR = [
-      ...(Array.isArray(where.OR) ? where.OR : []),
-      {
-        price: {
-          ...(filters.minPrice != null ? { gte: filters.minPrice } : {}),
-          ...(filters.maxPrice != null ? { lte: filters.maxPrice } : {}),
-        },
-      },
-    ];
+  if (conditions.length > 0) {
+    where.AND = conditions;
   }
 
   let orderBy: Prisma.ProductOrderByWithRelationInput = { createdAt: "desc" };
@@ -77,24 +91,48 @@ export async function getProducts(filters: ProductListFilters = {}) {
     prisma.product.findMany({
       where,
       orderBy,
-      skip,
-      take: limit,
+      ...(priceSensitive ? {} : { skip, take: limit }),
       include: {
         images: { where: { isPrimary: true }, take: 1 },
         category: true,
         reviews: { where: { status: "APPROVED" }, select: { rating: true } },
       },
     }),
-    prisma.product.count({ where }),
+    priceSensitive ? Promise.resolve(0) : prisma.product.count({ where }),
   ]);
+  const discountRules = await getActiveAutomaticDiscounts();
+  const automaticPrices = applyAutomaticDiscounts(products, discountRules);
+  let pricedProducts = products.map((product) => {
+    const price = automaticPrices.get(product.id)?.unitPrice ?? Number(product.salePrice ?? product.price);
+    return { product, effectivePrice: price };
+  });
+  if (priceSensitive) {
+    pricedProducts = pricedProducts.filter(({ product, effectivePrice }) => {
+      const onSale = effectivePrice < Number(product.price);
+      return (
+        (!filters.onSale || onSale) &&
+        (filters.minPrice == null || effectivePrice >= filters.minPrice) &&
+        (filters.maxPrice == null || effectivePrice <= filters.maxPrice)
+      );
+    });
+    if (filters.sort === "price-low") {
+      pricedProducts.sort((a, b) => a.effectivePrice - b.effectivePrice);
+    } else if (filters.sort === "price-high") {
+      pricedProducts.sort((a, b) => b.effectivePrice - a.effectivePrice);
+    }
+  }
+  const matchingTotal = priceSensitive ? pricedProducts.length : total;
+  const pageProducts = priceSensitive
+    ? pricedProducts.slice(skip, skip + limit)
+    : pricedProducts;
 
   return {
-    products: products.map((p) => ({
+    products: pageProducts.map(({ product: p, effectivePrice }) => ({
       id: p.id,
       name: p.name,
       slug: p.slug,
       price: Number(p.price),
-      salePrice: p.salePrice != null ? Number(p.salePrice) : null,
+      salePrice: effectivePrice < Number(p.price) ? effectivePrice : null,
       imageUrl: p.images[0]?.url ?? null,
       isNewArrival: p.isNewArrival,
       stockQuantity: p.stockQuantity,
@@ -104,9 +142,9 @@ export async function getProducts(filters: ProductListFilters = {}) {
           : null,
       categorySlug: p.category?.slug,
     })),
-    total,
+    total: matchingTotal,
     page,
-    totalPages: Math.ceil(total / limit),
+    totalPages: Math.ceil(matchingTotal / limit),
   };
 }
 
@@ -151,6 +189,8 @@ export async function getBestSellers(limit = 8) {
       reviews: { where: { status: "APPROVED" }, select: { rating: true } },
     },
   });
+  const discountRules = await getActiveAutomaticDiscounts();
+  const automaticPrices = applyAutomaticDiscounts(products, discountRules);
 
   // Preserve order
   const map = new Map(products.map((p) => [p.id, p]));
@@ -163,7 +203,10 @@ export async function getBestSellers(limit = 8) {
         name: p!.name,
         slug: p!.slug,
         price: Number(p!.price),
-        salePrice: p!.salePrice != null ? Number(p!.salePrice) : null,
+        salePrice:
+          (automaticPrices.get(p!.id)?.unitPrice ?? Number(p!.salePrice ?? p!.price)) < Number(p!.price)
+            ? automaticPrices.get(p!.id)!.unitPrice
+            : null,
         imageUrl: p!.images[0]?.url ?? null,
         isNewArrival: p!.isNewArrival,
         stockQuantity: p!.stockQuantity,

@@ -33,7 +33,7 @@ export default async function AnalyticsPage() {
   return (
     <div>
       <h1 className="text-xl font-semibold mb-6">Sales Analytics</h1>
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+      <div className="mb-8 grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
         <div className="rounded-[var(--radius-md)] border border-[var(--border)] bg-white p-4 shadow-soft">
           <p className="text-xs text-[var(--muted)]">Revenue</p>
           <p className="text-xl font-semibold">{formatPrice(stats.periodRevenue)}</p>

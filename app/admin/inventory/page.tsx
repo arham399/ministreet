@@ -1,4 +1,4 @@
-import { prisma } from "@/lib/db/prisma";
+﻿import { prisma } from "@/lib/db/prisma";
 
 export const metadata = { title: "Inventory | Admin" };
 
@@ -32,23 +32,23 @@ export default async function InventoryPage() {
 
   return (
     <div>
-      <h1 className="text-xl font-semibold mb-6">Inventory</h1>
-      <div className="grid grid-cols-3 gap-4 mb-6">
-        <div className="rounded-[var(--radius-md)] border border-[var(--border)] bg-white p-4">
+      <h1 className="mb-5 text-xl font-semibold sm:mb-6">Inventory</h1>
+      <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">
+        <div className="rounded-[var(--radius-md)] border border-[var(--border)] bg-white p-3 sm:p-4">
           <p className="text-xs text-[var(--muted)]">Total units</p>
           <p className="text-xl font-semibold">{totalStock}</p>
         </div>
-        <div className="rounded-[var(--radius-md)] border border-[var(--border)] bg-white p-4">
+        <div className="rounded-[var(--radius-md)] border border-[var(--border)] bg-white p-3 sm:p-4">
           <p className="text-xs text-[var(--muted)]">Low stock</p>
           <p className="text-xl font-semibold">{low}</p>
         </div>
-        <div className="rounded-[var(--radius-md)] border border-[var(--border)] bg-white p-4">
+        <div className="rounded-[var(--radius-md)] border border-[var(--border)] bg-white p-3 sm:p-4">
           <p className="text-xs text-[var(--muted)]">Out of stock</p>
           <p className="text-xl font-semibold">{out}</p>
         </div>
       </div>
-      <div className="rounded-[var(--radius-md)] border border-[var(--border)] bg-white overflow-x-auto">
-        <table className="w-full text-sm">
+      <div className="overflow-x-auto rounded-[var(--radius-md)] border border-[var(--border)] bg-white">
+        <table className="w-full min-w-[620px] text-sm">
           <thead>
             <tr className="border-b border-[var(--border)] text-left text-[var(--muted)]">
               <th className="px-4 py-3">Product</th>
@@ -95,3 +95,4 @@ export default async function InventoryPage() {
     </div>
   );
 }
+

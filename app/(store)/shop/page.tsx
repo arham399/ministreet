@@ -1,7 +1,10 @@
-import { ProductCard } from "@/components/product/product-card";
-import { getProducts } from "@/lib/db/queries/products";
-import { CATEGORIES } from "@/lib/constants";
 import Link from "next/link";
+import { notFound, redirect } from "next/navigation";
+import { CategoryFilterDrawer } from "@/components/product/category-filter-drawer";
+import { CategorySortForm } from "@/components/product/category-sort-form";
+import { ProductCard, type ProductCardData } from "@/components/product/product-card";
+import { CATEGORIES } from "@/lib/constants";
+import { getProductPriceCeiling, getProducts } from "@/lib/db/queries/products";
 
 export const metadata = {
   title: "Shop All",
@@ -12,107 +15,262 @@ type Props = {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 };
 
+function singleParam(value: string | string[] | undefined) {
+  return typeof value === "string" ? value : undefined;
+}
+
+function validPrice(value: string | undefined) {
+  if (!value || !/^\d+$/.test(value)) return undefined;
+  const price = Number(value);
+  return Number.isSafeInteger(price) && price >= 0 ? price : undefined;
+}
+
+function validPage(value: string | undefined) {
+  if (!value || !/^\d+$/.test(value)) return 1;
+  const page = Number(value);
+  return Number.isSafeInteger(page) && page > 0 ? page : 1;
+}
+
+function queryHref(values: Record<string, string | undefined>) {
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(values)) {
+    if (value) query.set(key, value);
+  }
+  const suffix = query.toString();
+  return `/shop${suffix ? `?${suffix}` : ""}`;
+}
+
 export default async function ShopPage({ searchParams }: Props) {
   const sp = await searchParams;
-  const category = typeof sp.category === "string" ? sp.category : undefined;
-  const q = typeof sp.q === "string" ? sp.q : undefined;
-  const sort = typeof sp.sort === "string" ? sp.sort : "featured";
-  const page = Number(sp.page || 1);
+  const requestedCategory = singleParam(sp.category);
+  const category = CATEGORIES.some((item) => item.slug === requestedCategory)
+    ? requestedCategory
+    : undefined;
+  if (requestedCategory && !category) notFound();
 
-  let result = {
-    products: [] as {
-      id: string;
-      name: string;
-      slug: string;
-      price: number;
-      salePrice: number | null;
-      imageUrl: string | null;
-      isNewArrival?: boolean;
-      stockQuantity: number;
-      averageRating: number | null;
-    }[],
-    total: 0,
-    totalPages: 0,
+  const q = singleParam(sp.q)?.trim().slice(0, 100) || undefined;
+  const minPrice = validPrice(singleParam(sp.minPrice));
+  const maxPrice = validPrice(singleParam(sp.maxPrice));
+  const page = validPage(singleParam(sp.page));
+  const sortValues = ["featured", "newest", "price-low", "price-high", "name"];
+  const requestedSort = singleParam(sp.sort);
+  const sort = requestedSort && sortValues.includes(requestedSort) ? requestedSort : "featured";
+  const inStock = singleParam(sp.inStock) === "1";
+  const onSale = singleParam(sp.onSale) === "1";
+  const filterValues = {
+    category,
+    q,
+    sort: sort === "featured" ? undefined : sort,
+    minPrice: minPrice == null ? undefined : String(minPrice),
+    maxPrice: maxPrice == null ? undefined : String(maxPrice),
+    inStock: inStock ? "1" : undefined,
+    onSale: onSale ? "1" : undefined,
   };
 
+  let result: {
+    products: ProductCardData[];
+    total: number;
+    page: number;
+    totalPages: number;
+  };
+  let priceCeiling = 1;
+
   try {
-    result = await getProducts({ category, q, sort, page, limit: 24 });
-  } catch {
-    // Demo fallback
+    [result, priceCeiling] = await Promise.all([
+      getProducts({
+        category,
+        q,
+        minPrice,
+        maxPrice,
+        inStock,
+        onSale,
+        sort,
+        page,
+        limit: 24,
+      }),
+      getProductPriceCeiling(category),
+    ]);
+  } catch (error) {
+    console.error("[shop] Failed to load products; showing demo products instead.", error);
+    const demoProducts: (ProductCardData & { categorySlug: string })[] = [
+      {
+        id: "1",
+        name: "Pearl Drop Earrings",
+        slug: "pearl-drop-earrings",
+        price: 1599,
+        salePrice: 1299,
+        imageUrl: null,
+        isNewArrival: true,
+        stockQuantity: 25,
+        averageRating: null,
+        categorySlug: "earrings",
+      },
+      {
+        id: "2",
+        name: "Golden Heart Bracelet",
+        slug: "golden-heart-bracelet",
+        price: 1899,
+        salePrice: 1499,
+        imageUrl: null,
+        isNewArrival: true,
+        stockQuantity: 18,
+        averageRating: null,
+        categorySlug: "bracelets",
+      },
+    ];
+    priceCeiling = Math.max(
+      1,
+      ...demoProducts
+        .filter((product) => !category || product.categorySlug === category)
+        .map((product) => product.price)
+    );
+    const filteredProducts = demoProducts.filter((product) => {
+      const effectivePrice = product.salePrice ?? product.price;
+      const matchesQuery =
+        !q ||
+        product.name.toLowerCase().includes(q.toLowerCase()) ||
+        product.categorySlug.includes(q.toLowerCase());
+      return (
+        (!category || product.categorySlug === category) &&
+        matchesQuery &&
+        (!inStock || (product.stockQuantity ?? 0) > 0) &&
+        (!onSale || product.salePrice != null) &&
+        (minPrice == null || effectivePrice >= minPrice) &&
+        (maxPrice == null || effectivePrice <= maxPrice)
+      );
+    });
+    if (sort === "price-low") filteredProducts.sort((a, b) => (a.salePrice ?? a.price) - (b.salePrice ?? b.price));
+    if (sort === "price-high") filteredProducts.sort((a, b) => (b.salePrice ?? b.price) - (a.salePrice ?? a.price));
+    if (sort === "name") filteredProducts.sort((a, b) => a.name.localeCompare(b.name));
+    const start = (page - 1) * 24;
     result = {
-      products: [
-        { id: "1", name: "Pearl Drop Earrings", slug: "pearl-drop-earrings", price: 1599, salePrice: 1299, imageUrl: null, isNewArrival: true, stockQuantity: 25, averageRating: null },
-        { id: "2", name: "Golden Heart Bracelet", slug: "golden-heart-bracelet", price: 1899, salePrice: 1499, imageUrl: null, isNewArrival: true, stockQuantity: 18, averageRating: null },
-      ],
-      total: 2,
-      totalPages: 1,
+      products: filteredProducts.slice(start, start + 24),
+      total: filteredProducts.length,
+      page,
+      totalPages: Math.ceil(filteredProducts.length / 24),
     };
   }
 
+  if (page > Math.max(1, result.totalPages)) {
+    redirect(queryHref(filterValues));
+  }
+
+  const activeFilterCount =
+    Number(Boolean(category)) +
+    Number(minPrice != null) +
+    Number(maxPrice != null) +
+    Number(inStock) +
+    Number(onSale);
+  const hasFilters = activeFilterCount > 0;
+  const clearHref = queryHref({
+    q,
+    sort: sort === "featured" ? undefined : sort,
+  });
+  const firstProduct = result.total === 0 ? 0 : (result.page - 1) * 24 + 1;
+  const lastProduct = Math.min(result.page * 24, result.total);
+
   return (
-    <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
-      <nav className="text-sm text-[var(--muted)] mb-4">
+    <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-12 lg:px-8">
+      <nav aria-label="Breadcrumb" className="mb-4 text-sm text-[var(--muted)]">
         <Link href="/" className="hover:text-[var(--brand-pink)]">Home</Link>
         <span className="mx-2">/</span>
         <span className="text-[var(--charcoal)]">Shop</span>
       </nav>
       <div className="mb-8">
-        <h1 className="font-display text-3xl sm:text-4xl font-semibold text-[var(--charcoal)]">Shop All</h1>
-        <p className="text-sm text-[var(--muted)] mt-1">Discover all Mini Street treasures</p>
+        <h1 className="font-display text-3xl font-semibold text-[var(--charcoal)] sm:text-4xl">Shop All</h1>
+        <p className="mt-1 text-sm text-[var(--muted)]">
+          {q ? `Search results for “${q}”` : "Discover all Mini Street treasures"}
+        </p>
       </div>
-      <div className="flex flex-col lg:flex-row gap-8">
-        <aside className="hidden lg:block w-56 shrink-0">
-          <div className="sticky top-24 space-y-6">
-            <div>
-              <h3 className="text-sm font-semibold mb-3">Category</h3>
-              <ul className="space-y-2 text-sm text-[var(--muted)]">
-                <li>
-                  <Link href="/shop" className={!category ? "text-[var(--brand-pink)] font-medium" : "hover:text-[var(--charcoal)]"}>
-                    All
-                  </Link>
-                </li>
-                {CATEGORIES.map((c) => (
-                  <li key={c.slug}>
-                    <Link
-                      href={`/shop?category=${c.slug}`}
-                      className={category === c.slug ? "text-[var(--brand-pink)] font-medium" : "hover:text-[var(--charcoal)]"}
-                    >
-                      {c.name}
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </div>
-        </aside>
-        <div className="flex-1">
-          <div className="flex items-center justify-between mb-6">
-            <p className="text-sm text-[var(--muted)]">{result.total} treasures</p>
-            <form>
-              <select
-                name="sort"
-                defaultValue={sort}
-                className="h-9 rounded-[var(--radius-sm)] border border-[var(--border)] px-3 text-sm bg-white"
-                aria-label="Sort products"
-              >
-                <option value="featured">Featured</option>
-                <option value="newest">Newest</option>
-                <option value="price-low">Price: Low to High</option>
-                <option value="price-high">Price: High to Low</option>
-              </select>
-            </form>
-          </div>
-          {result.products.length === 0 ? (
-            <p className="text-center text-[var(--muted)] py-16">No products found.</p>
-          ) : (
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-4 sm:gap-6">
-              {result.products.map((p) => (
-                <ProductCard key={p.id} product={p} />
-              ))}
-            </div>
-          )}
+
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] pb-4">
+        <p className="text-sm font-medium text-[var(--charcoal)]">
+          {result.total} {result.total === 1 ? "product" : "products"}
+          {hasFilters && <span className="ml-1 font-normal text-[var(--muted)]">{" "}matching your filters</span>}
+        </p>
+        <div className="flex items-center gap-2.5">
+          <CategorySortForm
+            action="/shop"
+            category={category}
+            searchQuery={q}
+            sort={sort}
+            minPrice={filterValues.minPrice}
+            maxPrice={filterValues.maxPrice}
+            inStock={filterValues.inStock}
+            onSale={filterValues.onSale}
+          />
+          <CategoryFilterDrawer
+            action="/shop"
+            sort={sort}
+            minPrice={minPrice}
+            maxPrice={maxPrice}
+            priceCeiling={priceCeiling}
+            inStock={inStock}
+            onSale={onSale}
+            activeFilterCount={activeFilterCount}
+            clearHref={clearHref}
+            selectedCategory={category}
+            searchQuery={q}
+            showCategoryFilter
+          />
         </div>
       </div>
+
+      {result.products.length === 0 ? (
+        <div className="rounded-[var(--radius-md)] border border-dashed border-[var(--border)] px-6 py-16 text-center">
+          <h2 className="font-display text-xl text-[var(--charcoal)]">
+            {hasFilters || q ? "No products match your selection" : "A little sparkle is on its way"}
+          </h2>
+          <p className="mt-2 text-sm text-[var(--muted)]">
+            {hasFilters || q
+              ? "Try adjusting your search or filters."
+              : "Products will appear here once they are added to the shop."}
+          </p>
+          {(hasFilters || q) && (
+            <Link href="/shop" className="mt-4 inline-flex text-sm font-medium text-[var(--brand-pink)] hover:underline">
+              Clear search and filters
+            </Link>
+          )}
+        </div>
+      ) : (
+        <>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4 lg:gap-6">
+            {result.products.map((product) => (
+              <ProductCard key={product.id} product={product} />
+            ))}
+          </div>
+          {result.totalPages > 1 && (
+            <nav aria-label="Product pages" className="mt-8 flex flex-wrap items-center justify-between gap-3 border-t border-[var(--border)] pt-5">
+              <p className="text-sm text-[var(--muted)]">
+                Showing {firstProduct}–{lastProduct} of {result.total} {result.total === 1 ? "product" : "products"}
+              </p>
+              <div className="flex items-center gap-2">
+                {result.page > 1 ? (
+                  <Link
+                    href={queryHref({ ...filterValues, page: String(result.page - 1) })}
+                    className="inline-flex h-10 items-center rounded-[var(--radius-sm)] border border-[var(--border)] px-4 text-sm font-medium hover:border-[var(--brand-pink)] hover:text-[var(--brand-pink)]"
+                  >
+                    Previous
+                  </Link>
+                ) : (
+                  <span className="inline-flex h-10 items-center rounded-[var(--radius-sm)] border border-[var(--border)] px-4 text-sm text-[var(--muted)] opacity-50">Previous</span>
+                )}
+                <span className="px-2 text-sm text-[var(--muted)]">Page {result.page} of {result.totalPages}</span>
+                {result.page < result.totalPages ? (
+                  <Link
+                    href={queryHref({ ...filterValues, page: String(result.page + 1) })}
+                    className="inline-flex h-10 items-center rounded-[var(--radius-sm)] border border-[var(--border)] px-4 text-sm font-medium hover:border-[var(--brand-pink)] hover:text-[var(--brand-pink)]"
+                  >
+                    Next
+                  </Link>
+                ) : (
+                  <span className="inline-flex h-10 items-center rounded-[var(--radius-sm)] border border-[var(--border)] px-4 text-sm text-[var(--muted)] opacity-50">Next</span>
+                )}
+              </div>
+            </nav>
+          )}
+        </>
+      )}
     </div>
   );
 }

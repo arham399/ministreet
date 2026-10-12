@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { useWishlistStore } from "@/lib/cart/wishlist-store";
 import { useCartStore } from "@/lib/cart/store";
@@ -37,11 +38,18 @@ function WishlistContent() {
               key={item.productId}
               className="flex flex-wrap items-center justify-between gap-3 p-4 rounded-[var(--radius-lg)] border border-[var(--border)] bg-white"
             >
-              <div>
-                <Link href={`/product/${item.slug}`} className="font-medium text-sm hover:text-[var(--brand-pink)]">
-                  {item.name}
-                </Link>
-                <p className="text-sm font-semibold mt-1">{formatPrice(price)}</p>
+              <div className="flex min-w-0 items-center">
+                {item.imageUrl && (
+                  <Link href={`/product/${item.slug}`} className="relative mr-4 block h-20 w-20 shrink-0 overflow-hidden rounded-lg bg-[var(--brand-cream)]">
+                    <Image src={item.imageUrl} alt={item.name} fill sizes="80px" className="object-contain p-1" />
+                  </Link>
+                )}
+                <div className="min-w-0">
+                  <Link href={`/product/${item.slug}`} className="font-medium text-sm hover:text-[var(--brand-pink)]">
+                    {item.name}
+                  </Link>
+                  <p className="text-sm font-semibold mt-1">{formatPrice(price)}</p>
+                </div>
               </div>
               <div className="flex gap-2">
                 <Button

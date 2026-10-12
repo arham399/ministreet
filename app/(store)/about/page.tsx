@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Gift, Heart, PackageCheck, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export const metadata = { title: "About Mini Street" };
@@ -24,12 +25,19 @@ export default function AboutPage() {
         </div>
         <div>
           <h2 className="font-display text-2xl font-semibold text-[var(--charcoal)] mb-3">What We Believe</h2>
-          <ul className="space-y-2 list-disc list-inside">
-            <li>Beauty lives in the little things</li>
-            <li>Jewelry should feel personal and wearable</li>
-            <li>Gifting should be easy and thoughtful</li>
-            <li>Quality and care in every package</li>
-          </ul>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {[
+              { icon: Sparkles, title: "Chosen with care", desc: "Thoughtfully selected pieces for everyday sparkle." },
+              { icon: Heart, title: "Made to feel special", desc: "Little details that feel personal and lovely." },
+              { icon: PackageCheck, title: "Packed with love", desc: "Every order prepared with care." },
+              { icon: Gift, title: "Lovely to gift", desc: "A little joy to share with someone dear." },
+            ].map(({ icon: Icon, title, desc }) => (
+              <div key={title} className="flex items-start gap-3 rounded-2xl border border-[var(--border)]/70 bg-white/75 p-4 shadow-soft">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--brand-blush)] text-[var(--brand-pink)]"><Icon size={17} strokeWidth={1.7} /></span>
+                <span><strong className="block text-sm font-semibold text-[var(--charcoal)]">{title}</strong><span className="mt-1 block text-xs leading-relaxed text-[var(--muted)]">{desc}</span></span>
+              </div>
+            ))}
+          </div>
         </div>
         <div className="pt-4 text-center">
           <Button asChild size="lg">

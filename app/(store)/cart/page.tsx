@@ -8,10 +8,13 @@ import { formatPrice } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { FREE_SHIPPING_THRESHOLD, DEFAULT_SHIPPING_COST } from "@/lib/constants";
 import { CartHydration } from "@/components/providers/cart-provider";
+import { useCartDiscountQuote } from "@/hooks/use-cart-discount-quote";
 
 function CartContent() {
   const { items, updateQuantity, removeItem, getSubtotal } = useCartStore();
-  const subtotal = getSubtotal();
+  const { quote, error: quoteError, loading: quoteLoading } = useCartDiscountQuote();
+  const quotedPrices = new Map(quote?.items.map((item) => [item.productId, item.unitPrice]) ?? []);
+  const subtotal = quote?.subtotal ?? getSubtotal();
   const shipping = subtotal >= FREE_SHIPPING_THRESHOLD ? 0 : DEFAULT_SHIPPING_COST;
   const total = subtotal + shipping;
 
@@ -33,10 +36,12 @@ function CartContent() {
       <div className="grid lg:grid-cols-3 gap-8">
         <div className="lg:col-span-2 space-y-4">
           {items.map((item) => {
-            const price =
+            const storedPrice =
               item.salePrice != null && item.salePrice < item.unitPrice
                 ? item.salePrice
                 : item.unitPrice;
+            const quotedItem = quote?.items.find((line) => line.productId === item.productId);
+            const price = quotedPrices.get(item.productId) ?? storedPrice;
             return (
               <div
                 key={item.productId}
@@ -56,7 +61,17 @@ function CartContent() {
                   >
                     {item.name}
                   </Link>
-                  <p className="text-sm font-semibold mt-1">{formatPrice(price)}</p>
+                  <div className="mt-1 flex items-baseline gap-2">
+                    <p className="text-sm font-semibold">{formatPrice(price)}</p>
+                    {price < item.unitPrice && (
+                      <p className="text-xs text-[var(--muted)] line-through">{formatPrice(item.unitPrice)}</p>
+                    )}
+                  </div>
+                  {quotedItem?.discountName && (
+                    <p className="mt-1 text-xs font-medium text-[var(--brand-pink)]">
+                      {quotedItem.discountName} applied automatically
+                    </p>
+                  )}
                   <div className="flex items-center gap-3 mt-3">
                     <div className="flex items-center border border-[var(--border)] rounded-[var(--radius-sm)]">
                       <button
@@ -99,6 +114,8 @@ function CartContent() {
           <div className="sticky top-24 p-6 rounded-[var(--radius-lg)] border border-[var(--border)] bg-white shadow-soft">
             <h2 className="font-semibold mb-4">Order Summary</h2>
             <div className="space-y-2 text-sm">
+              {quoteLoading && <p className="text-[var(--muted)]" role="status">Checking current offers…</p>}
+              {quoteError && <p className="text-[var(--error)]" role="alert">{quoteError}</p>}
               <div className="flex justify-between">
                 <span className="text-[var(--muted)]">Subtotal</span>
                 <span>{formatPrice(subtotal)}</span>
@@ -123,9 +140,15 @@ function CartContent() {
                 <span>{formatPrice(total)}</span>
               </div>
             </div>
-            <Button asChild className="w-full mt-6" size="lg">
-              <Link href="/checkout">Checkout</Link>
-            </Button>
+            {quoteLoading || quoteError ? (
+              <Button className="w-full mt-6" size="lg" disabled>
+                {quoteLoading ? "Checking offers…" : "Checkout unavailable"}
+              </Button>
+            ) : (
+              <Button asChild className="w-full mt-6" size="lg">
+                <Link href="/checkout">Checkout</Link>
+              </Button>
+            )}
             <Link
               href="/shop"
               className="block text-center text-sm text-[var(--brand-pink)] mt-3 hover:underline"

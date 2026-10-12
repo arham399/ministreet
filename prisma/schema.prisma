@@ -277,6 +277,7 @@ model Order {
   // Status
   status          OrderStatus   @default(PLACED)
   couponCode      String?
+  couponCampaignId String?
   couponDiscount  Decimal?
   // Courier
   courierName     String?
@@ -300,6 +301,7 @@ model Order {
   @@index([customerEmail])
   @@index([customerPhone])
   @@index([createdAt])
+  @@index([couponCode, couponCampaignId])
 }
 
 model OrderItem {
@@ -393,6 +395,7 @@ model DiscountProduct {
 model Coupon {
   id              String       @id @default(cuid())
   code            String       @unique
+  campaignId      String       @default("legacy")
   type            DiscountType
   value           Decimal
   minOrderAmount  Decimal?

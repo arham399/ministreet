@@ -14,7 +14,7 @@ Built to the full AGENT.md production specification.
 - **SQLite** + Prisma ORM
 - **Auth.js (NextAuth v5)** — credentials, JWT, roles
 - **Zod** validation · **Zustand** cart/wishlist · **Recharts** analytics
-- **Gmail SMTP** order emails · **Cloudinary** images · PDF invoices
+- **Gmail SMTP** order and newsletter emails · **Cloudinary** images · PDF invoices
 
 ---
 
@@ -55,7 +55,7 @@ openssl rand -base64 32
 - Wishlist (guest local + logged-in server sync API)
 - Optional accounts: register, login, orders, profile
 - Password reset via email token
-- Contact form → DB, newsletter, FAQ, policies
+- Contact form → DB, newsletter signup, FAQ, policies
 
 ### Admin
 - Role-based access (OWNER, ADMIN, ORDER_MANAGER, INVENTORY_MANAGER, SUPPORT)
@@ -65,6 +65,7 @@ openssl rand -base64 32
 - Orders + status transitions + tracking events + stock restore on cancel
 - Coupons, discounts, offers CRUD
 - Customers (registered + guests)
+- Newsletter campaigns and subscriber management (OWNER/ADMIN only; live preview, custom CTA links, active subscriber delivery, and unsubscribe links)
 - Reviews moderation
 - Invoices (HTML + PDF download)
 - Email log, users & roles, settings
@@ -88,7 +89,7 @@ See `.env.example`:
 | `DATABASE_URL` | Yes |
 | `AUTH_SECRET` | Yes |
 | `NEXT_PUBLIC_APP_URL` | Yes |
-| `OWNER_EMAIL` / `OWNER_PASSWORD` | For seed owner |
+| `OWNER_EMAIL` / `OWNER_PASSWORD` | For seed owner; `OWNER_EMAIL` also receives newsletter notifications if `ORDER_NOTIFICATION_EMAIL` is unset |
 | `GMAIL_USER` / `GMAIL_APP_PASSWORD` | For customer and order emails |
 | `ORDER_NOTIFICATION_EMAIL` | Inbox for new-order notifications |
 | `CLOUDINARY_*` | For image uploads |

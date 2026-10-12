@@ -23,6 +23,22 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: parsed.error.errors[0]?.message }, { status: 400 });
   }
   const d = parsed.data;
+  if (d.scope === "PRODUCT") {
+    const count = await prisma.product.count({
+      where: { id: { in: d.eligibleProductIds }, isActive: true, archivedAt: null },
+    });
+    if (count !== d.eligibleProductIds.length) {
+      return NextResponse.json({ error: "One or more selected products are unavailable." }, { status: 400 });
+    }
+  }
+  if (d.scope === "CATEGORY") {
+    const count = await prisma.category.count({
+      where: { id: { in: d.eligibleCategoryIds }, isActive: true },
+    });
+    if (count !== d.eligibleCategoryIds.length) {
+      return NextResponse.json({ error: "One or more selected categories are unavailable." }, { status: 400 });
+    }
+  }
   const discount = await prisma.discount.create({
     data: {
       name: d.name,
@@ -35,6 +51,14 @@ export async function POST(req: NextRequest) {
       endsAt: d.endsAt ? new Date(d.endsAt) : null,
       isActive: d.isActive,
       usageLimit: d.usageLimit,
+      products:
+        d.scope === "PRODUCT"
+          ? { create: d.eligibleProductIds.map((productId) => ({ productId })) }
+          : undefined,
+      categories:
+        d.scope === "CATEGORY"
+          ? { connect: d.eligibleCategoryIds.map((id) => ({ id })) }
+          : undefined,
     },
   });
   await prisma.auditLog.create({

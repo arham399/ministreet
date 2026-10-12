@@ -1,4 +1,19 @@
 import Link from "next/link";
+import {
+  BadgeCheck,
+  CircleCheck,
+  Heart,
+  MapPin,
+  Package,
+  PackageCheck,
+  Sparkles,
+  Truck,
+  Undo2,
+  WalletCards,
+  X,
+  type LucideIcon,
+} from "lucide-react";
+import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db/prisma";
 import { formatPrice } from "@/lib/utils";
 import { TRACKING_STATUS_COPY } from "@/lib/constants";
@@ -16,11 +31,35 @@ const STATUS_ORDER = [
   "DELIVERED",
 ] as const;
 
+const STATUS_ICONS: Record<string, LucideIcon> = {
+  PLACED: Package,
+  CONFIRMED: BadgeCheck,
+  PROCESSING: Sparkles,
+  PACKED: PackageCheck,
+  SHIPPED: Truck,
+  OUT_FOR_DELIVERY: MapPin,
+  DELIVERED: Heart,
+  CANCELLED: X,
+  RETURNED: Undo2,
+  REFUNDED: WalletCards,
+};
+
+type TrackingOrder = Prisma.OrderGetPayload<{
+  include: { items: true; trackingEvents: true };
+}>;
+
+type TrackingStep = {
+  status: string;
+  title: string;
+  description: string | null | undefined;
+  eventAt: Date | undefined;
+};
+
 export default async function TrackingDetailPage({ params }: Props) {
   const { trackingId } = await params;
   const decoded = decodeURIComponent(trackingId);
 
-  let order = null;
+  let order: TrackingOrder | null = null;
   try {
     order = await prisma.order.findFirst({
       where: {
@@ -54,6 +93,23 @@ export default async function TrackingDetailPage({ params }: Props) {
     currentStatus as (typeof STATUS_ORDER)[number]
   );
   const isTerminal = ["CANCELLED", "RETURNED", "REFUNDED"].includes(currentStatus);
+  const timelineSteps: TrackingStep[] = isTerminal
+    ? order.trackingEvents.map((event) => ({
+        status: event.status,
+        title: event.title,
+        description: event.description,
+        eventAt: event.eventAt,
+      }))
+    : STATUS_ORDER.map((status) => {
+        const event = order.trackingEvents.find((item) => item.status === status);
+        const copy = TRACKING_STATUS_COPY[status];
+        return {
+          status,
+          title: event?.title || copy?.title || status,
+          description: event?.description || copy?.description,
+          eventAt: event?.eventAt,
+        };
+      });
 
   return (
     <div className="mx-auto max-w-2xl px-4 sm:px-6 py-10 sm:py-16">
@@ -64,20 +120,10 @@ export default async function TrackingDetailPage({ params }: Props) {
 
       {/* Timeline */}
       <div className="relative mb-12">
-        {(isTerminal
-          ? order.trackingEvents
-          : STATUS_ORDER.map((status) => {
-              const event = order.trackingEvents.find((e) => e.status === status);
-              const copy = TRACKING_STATUS_COPY[status];
-              return {
-                status,
-                title: event?.title || copy?.title || status,
-                description: event?.description || copy?.description,
-                eventAt: event?.eventAt,
-              };
-            })
-        ).map((step, idx) => {
-          const status = "status" in step ? step.status : step.status;
+        {timelineSteps.map((step, idx) => {
+          const status = step.status;
+          const StatusIcon = STATUS_ICONS[status] || CircleCheck;
+          const isConnectorComplete = isTerminal || (currentIdx >= 0 && idx < currentIdx);
           const done =
             isTerminal ||
             (currentIdx >= 0 && STATUS_ORDER.indexOf(status as typeof STATUS_ORDER[number]) <= currentIdx);
@@ -85,28 +131,29 @@ export default async function TrackingDetailPage({ params }: Props) {
 
           return (
             <div key={status + idx} className="flex gap-4 pb-8 last:pb-0">
-              <div className="flex flex-col items-center">
+              <div className="flex w-10 shrink-0 flex-col items-center">
                 <div
                   className={cn(
-                    "w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold border-2 shrink-0",
+                    "relative z-10 flex size-10 shrink-0 items-center justify-center rounded-full border transition-colors",
                     done
-                      ? "bg-[var(--brand-pink)] border-[var(--brand-pink)] text-white"
-                      : "bg-white border-[var(--border)] text-[var(--muted)]",
+                      ? "border-[var(--brand-pink)] bg-[var(--brand-pink)] text-white"
+                      : "border-[var(--border)] bg-white text-[var(--muted)]",
                     active && "tracking-active"
                   )}
+                  aria-label={`${step.title}${active ? ", current status" : done ? ", completed" : ", upcoming"}`}
                 >
-                  {done ? "✓" : idx + 1}
+                  <StatusIcon size={18} strokeWidth={2} aria-hidden="true" />
                 </div>
-                {idx < (isTerminal ? order.trackingEvents.length - 1 : STATUS_ORDER.length - 1) && (
+                {idx < timelineSteps.length - 1 && (
                   <div
                     className={cn(
-                      "w-0.5 flex-1 mt-1",
-                      done ? "bg-[var(--brand-pink)]" : "bg-[var(--border)]"
+                      "my-1 w-0.5 flex-1 rounded-full",
+                      isConnectorComplete ? "bg-[var(--brand-pink)]" : "bg-[var(--border)]"
                     )}
                   />
                 )}
               </div>
-              <div className="pt-1">
+              <div className="min-w-0 flex-1 pt-1.5">
                 <p className={cn("font-medium text-sm", active && "text-[var(--brand-pink)]")}>
                   {step.title}
                 </p>

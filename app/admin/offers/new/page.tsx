@@ -33,7 +33,7 @@ export default function NewOfferPage() {
   return (
     <div>
       <h1 className="text-xl font-semibold mb-6">Add offer</h1>
-      <form onSubmit={handleSubmit} className="max-w-lg space-y-4">
+      <form onSubmit={handleSubmit} className="w-full max-w-lg space-y-4">
         <div>
           <label className="block text-sm font-medium mb-1.5">Title</label>
           <Input name="title" required />
@@ -50,7 +50,7 @@ export default function NewOfferPage() {
           <label className="block text-sm font-medium mb-1.5">Link URL</label>
           <Input name="linkUrl" placeholder="/shop" />
         </div>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
             <label className="block text-sm font-medium mb-1.5">Starts</label>
             <Input name="startsAt" type="datetime-local" />

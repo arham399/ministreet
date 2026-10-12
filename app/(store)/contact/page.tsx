@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { INSTAGRAM_URL } from "@/lib/constants";
+import { CONTACT_EMAIL, CONTACT_PHONE, CONTACT_PHONE_LINK, FACEBOOK_URL, INSTAGRAM_URL } from "@/lib/constants";
 
 export default function ContactPage() {
   const [sent, setSent] = useState(false);
@@ -82,20 +82,21 @@ export default function ContactPage() {
             </form>
           )}
         </div>
-        <div className="space-y-4 text-sm">
+        <div className="h-fit space-y-5 rounded-3xl border border-[var(--border)] bg-white/80 p-6 text-sm shadow-soft sm:p-7">
           <div>
-            <h3 className="font-semibold mb-1">Email</h3>
-            <p className="text-[var(--muted)]">STORE_EMAIL</p>
+            <h3 className="mb-1 font-semibold text-[var(--charcoal)]">Email</h3>
+            <a href={`mailto:${CONTACT_EMAIL}`} className="break-all text-[var(--brand-pink)] hover:underline">{CONTACT_EMAIL}</a>
           </div>
           <div>
-            <h3 className="font-semibold mb-1">Phone / WhatsApp</h3>
-            <p className="text-[var(--muted)]">STORE_PHONE</p>
+            <h3 className="mb-1 font-semibold text-[var(--charcoal)]">Phone</h3>
+            <a href={CONTACT_PHONE_LINK} className="text-[var(--brand-pink)] hover:underline">{CONTACT_PHONE}</a>
           </div>
           <div>
-            <h3 className="font-semibold mb-1">Instagram</h3>
-            <a href={INSTAGRAM_URL} target="_blank" rel="noopener noreferrer" className="text-[var(--brand-pink)] hover:underline">
-              @mini_street.co
-            </a>
+            <h3 className="mb-1 font-semibold text-[var(--charcoal)]">Follow Mini Street</h3>
+            <div className="flex flex-col items-start gap-2">
+              <a href={INSTAGRAM_URL} target="_blank" rel="noopener noreferrer" className="text-[var(--brand-pink)] hover:underline">Instagram · @mini_street.co</a>
+              <a href={FACEBOOK_URL} target="_blank" rel="noopener noreferrer" className="text-[var(--brand-pink)] hover:underline">Facebook</a>
+            </div>
           </div>
         </div>
       </div>

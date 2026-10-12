@@ -3,10 +3,13 @@
  * Never trusts client prices. Recalculates everything from DB.
  */
 import { prisma } from "@/lib/db/prisma";
-import { calculateOrderTotals, type CartLine } from "@/lib/pricing/calculate";
+import { calculateOrderTotals, calculateSubtotal, type CartLine } from "@/lib/pricing/calculate";
 import { generateOrderNumber, generateInvoiceNumber } from "@/lib/utils";
 import type { CheckoutInput } from "@/lib/validation/checkout";
 import { TRACKING_STATUS_COPY } from "@/lib/constants";
+import { validateCouponForCart } from "@/lib/coupons/validate-coupon";
+import { applyAutomaticDiscounts } from "@/lib/discounts/apply-automatic-discounts";
+import { getActiveAutomaticDiscounts } from "@/lib/discounts/queries";
 
 export type CreateOrderResult =
   | { success: true; orderId: string; orderNumber: string; trackingId: string; total: number }
@@ -42,8 +45,8 @@ export async function createOrder(input: CheckoutInput): Promise<CreateOrderResu
       }
     }
 
-    // Build lines from DB prices
-    const lines: CartLine[] = input.items.map((item) => {
+    // Apply the best eligible automatic discount using current database prices.
+    const baseLines: CartLine[] = input.items.map((item) => {
       const p = productMap.get(item.productId)!;
       return {
         productId: p.id,
@@ -52,46 +55,58 @@ export async function createOrder(input: CheckoutInput): Promise<CreateOrderResu
         salePrice: p.salePrice != null ? Number(p.salePrice) : null,
       };
     });
+    const automaticDiscountRules = await getActiveAutomaticDiscounts();
+    const automaticPrices = applyAutomaticDiscounts(
+      products,
+      automaticDiscountRules,
+      calculateSubtotal(baseLines),
+    );
+    const lines = baseLines.map((line) => ({
+      ...line,
+      salePrice: automaticPrices.get(line.productId)!.unitPrice,
+    }));
 
     // Coupon validation (server-side)
     let couponDiscount = 0;
     let couponCode: string | null = null;
+    let couponCampaignId: string | null = null;
     if (input.couponCode) {
       const coupon = await prisma.coupon.findUnique({
         where: { code: input.couponCode.toUpperCase() },
       });
-      if (!coupon || !coupon.isActive) {
+      if (!coupon) {
         return { success: false, error: "Invalid or inactive coupon code." };
       }
-      const now = new Date();
-      if (coupon.startsAt && coupon.startsAt > now) {
-        return { success: false, error: "This coupon is not yet active." };
+      let customerUsageCount = 0;
+      if (coupon.perCustomerLimit != null) {
+        const priorCouponOrders = await prisma.order.findMany({
+          where: {
+            couponCode: coupon.code,
+            ...(coupon.campaignId === "legacy"
+              ? { OR: [{ couponCampaignId: "legacy" }, { couponCampaignId: null }] }
+              : { couponCampaignId: coupon.campaignId }),
+          },
+          select: { customerEmail: true },
+        });
+        customerUsageCount = priorCouponOrders.filter(
+          (order) => order.customerEmail.toLowerCase() === input.customerEmail.toLowerCase(),
+        ).length;
       }
-      if (coupon.endsAt && coupon.endsAt < now) {
-        return { success: false, error: "This coupon has expired." };
+
+      const validation = validateCouponForCart(
+        coupon,
+        lines.map((line) => ({
+          ...line,
+          categoryId: productMap.get(line.productId)!.categoryId,
+        })),
+        customerUsageCount,
+      );
+      if (!validation.valid) {
+        return { success: false, error: validation.error };
       }
-      if (coupon.usageLimit != null && coupon.usageCount >= coupon.usageLimit) {
-        return { success: false, error: "This coupon has reached its usage limit." };
-      }
-      const subtotal = lines.reduce((s, l) => {
-        const price = l.salePrice != null && l.salePrice < l.unitPrice ? l.salePrice : l.unitPrice;
-        return s + price * l.quantity;
-      }, 0);
-      if (coupon.minOrderAmount && subtotal < Number(coupon.minOrderAmount)) {
-        return {
-          success: false,
-          error: `Minimum order of Rs. ${coupon.minOrderAmount} required for this coupon.`,
-        };
-      }
-      if (coupon.type === "PERCENTAGE") {
-        couponDiscount = (subtotal * Number(coupon.value)) / 100;
-        if (coupon.maxDiscount) {
-          couponDiscount = Math.min(couponDiscount, Number(coupon.maxDiscount));
-        }
-      } else {
-        couponDiscount = Number(coupon.value);
-      }
+      couponDiscount = validation.discountAmount;
       couponCode = coupon.code;
+      couponCampaignId = coupon.campaignId;
     }
 
     const totals = calculateOrderTotals({
@@ -138,6 +153,30 @@ export async function createOrder(input: CheckoutInput): Promise<CreateOrderResu
         }
       }
 
+      const appliedDiscountIds = new Set(
+        [...automaticPrices.values()]
+          .map((price) => price.discountId)
+          .filter((id): id is string => id !== null),
+      );
+      for (const discountId of appliedDiscountIds) {
+        const rule = automaticDiscountRules.find((discount) => discount.id === discountId);
+        if (!rule) continue;
+        const updated = await tx.discount.updateMany({
+          where: {
+            id: rule.id,
+            isActive: true,
+            usageCount: rule.usageCount,
+            usageLimit: rule.usageLimit,
+            OR: [{ startsAt: null }, { startsAt: { lte: new Date() } }],
+            AND: [{ OR: [{ endsAt: null }, { endsAt: { gte: new Date() } }] }],
+          },
+          data: { usageCount: { increment: 1 } },
+        });
+        if (updated.count !== 1) {
+          throw new Error("An applied discount changed while your order was being placed. Please review your cart and try again.");
+        }
+      }
+
       // Create order
       const created = await tx.order.create({
         data: {
@@ -160,14 +199,12 @@ export async function createOrder(input: CheckoutInput): Promise<CreateOrderResu
           paymentStatus: "PENDING",
           status: "PLACED",
           couponCode,
+          couponCampaignId,
           couponDiscount: couponDiscount > 0 ? couponDiscount : null,
           items: {
             create: input.items.map((item) => {
               const p = productMap.get(item.productId)!;
-              const unit =
-                p.salePrice != null && Number(p.salePrice) < Number(p.price)
-                  ? Number(p.salePrice)
-                  : Number(p.price);
+              const unit = automaticPrices.get(p.id)!.unitPrice;
               return {
                 productId: p.id,
                 productNameSnapshot: p.name,
@@ -203,11 +240,14 @@ export async function createOrder(input: CheckoutInput): Promise<CreateOrderResu
       });
 
       // Increment coupon usage
-      if (couponCode) {
-        await tx.coupon.update({
-          where: { code: couponCode },
+      if (couponCode && couponCampaignId) {
+        const couponUsageUpdate = await tx.coupon.updateMany({
+          where: { code: couponCode, campaignId: couponCampaignId },
           data: { usageCount: { increment: 1 } },
         });
+        if (couponUsageUpdate.count !== 1) {
+          throw new Error("This coupon changed while your order was being placed. Please review it and try again.");
+        }
       }
 
       return created;
@@ -223,6 +263,21 @@ export async function createOrder(input: CheckoutInput): Promise<CreateOrderResu
       const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
       const formatRupees = (amount: number) =>
         `Rs. ${amount.toLocaleString("en-PK")}`;
+      const emailItems = input.items.map((item) => {
+        const product = productMap.get(item.productId)!;
+        const unitPrice =
+          product.salePrice != null &&
+          Number(product.salePrice) < Number(product.price)
+            ? Number(product.salePrice)
+            : Number(product.price);
+        return {
+          name: product.name,
+          quantity: item.quantity,
+          lineTotal: formatRupees(unitPrice * item.quantity),
+        };
+      });
+      const emailDiscount =
+        totals.discountAmount > 0 ? formatRupees(totals.discountAmount) : null;
       const customerEmail = sendEmail({
         to: input.customerEmail,
         subject: `Your Mini Street order ${order.orderNumber} is confirmed`,
@@ -230,6 +285,13 @@ export async function createOrder(input: CheckoutInput): Promise<CreateOrderResu
           customerName: input.customerName,
           orderNumber: order.orderNumber,
           trackingId: order.trackingId,
+          items: emailItems,
+          subtotal: formatRupees(totals.subtotal),
+          shipping:
+            totals.shippingAmount > 0
+              ? formatRupees(totals.shippingAmount)
+              : "Free",
+          discount: emailDiscount,
           total: formatRupees(Number(order.total)),
           trackUrl: `${appUrl}/track-order/${order.trackingId}`,
         }),
@@ -246,21 +308,14 @@ export async function createOrder(input: CheckoutInput): Promise<CreateOrderResu
               customerEmail: input.customerEmail,
               customerPhone: input.customerPhone,
               orderNumber: order.orderNumber,
-              items: input.items.map((item) => {
-                const product = productMap.get(item.productId)!;
-                const unitPrice =
-                  product.salePrice != null &&
-                  Number(product.salePrice) < Number(product.price)
-                    ? Number(product.salePrice)
-                    : Number(product.price);
-                return {
-                  name: product.name,
-                  quantity: item.quantity,
-                  lineTotal: formatRupees(unitPrice * item.quantity),
-                };
-              }),
+              trackingId: order.trackingId,
+              items: emailItems,
               subtotal: formatRupees(totals.subtotal),
-              shipping: formatRupees(totals.shippingAmount),
+              shipping:
+                totals.shippingAmount > 0
+                  ? formatRupees(totals.shippingAmount)
+                  : "Free",
+              discount: emailDiscount,
               total: formatRupees(Number(order.total)),
               shippingAddress: [
                 input.shippingLine1,

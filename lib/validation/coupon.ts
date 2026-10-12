@@ -22,10 +22,41 @@ export const discountSchema = z.object({
   scope: z.enum(["PRODUCT", "CATEGORY", "STOREWIDE"]),
   minOrderAmount: z.coerce.number().positive().optional().nullable(),
   maxDiscount: z.coerce.number().positive().optional().nullable(),
-  startsAt: z.string().optional().nullable(),
-  endsAt: z.string().optional().nullable(),
+  startsAt: z.string().datetime().optional().nullable(),
+  endsAt: z.string().datetime().optional().nullable(),
   isActive: z.boolean().default(true),
   usageLimit: z.coerce.number().int().positive().optional().nullable(),
+  eligibleProductIds: z.array(z.string().min(1)).default([]),
+  eligibleCategoryIds: z.array(z.string().min(1)).default([]),
+}).superRefine((discount, context) => {
+  if (discount.scope === "PRODUCT" && discount.eligibleProductIds.length === 0) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["eligibleProductIds"],
+      message: "Select at least one product for a product discount.",
+    });
+  }
+  if (discount.scope === "CATEGORY" && discount.eligibleCategoryIds.length === 0) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["eligibleCategoryIds"],
+      message: "Select at least one category for a category discount.",
+    });
+  }
+  if (discount.type === "PERCENTAGE" && discount.value > 100) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["value"],
+      message: "Percentage discounts cannot exceed 100%.",
+    });
+  }
+  if (discount.startsAt && discount.endsAt && new Date(discount.endsAt) <= new Date(discount.startsAt)) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["endsAt"],
+      message: "The end date must be after the start date.",
+    });
+  }
 });
 
 export const offerSchema = z.object({

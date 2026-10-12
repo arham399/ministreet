@@ -56,7 +56,7 @@ async function main() {
           create: ["pearl", "gold", "everyday"].map((name) => ({ name })),
         },
         images: {
-          create: [{ url: "/images/placeholders/product.svg", alt: "Pearl Drop Earrings", isPrimary: true, sortOrder: 0 }],
+          create: [{ url: "/images/products/pearl-drop-earrings.svg", alt: "Pearl Drop Earrings", isPrimary: true, sortOrder: 0 }],
         },
       },
     });
@@ -82,7 +82,7 @@ async function main() {
           create: ["heart", "gold", "gift"].map((name) => ({ name })),
         },
         images: {
-          create: [{ url: "/images/placeholders/product.svg", alt: "Golden Heart Bracelet", isPrimary: true, sortOrder: 0 }],
+          create: [{ url: "/images/products/golden-heart-bracelet.svg", alt: "Golden Heart Bracelet", isPrimary: true, sortOrder: 0 }],
         },
       },
     });
@@ -95,8 +95,8 @@ async function main() {
     { key: "announcement_visible", value: "true" },
     { key: "store_email", value: "STORE_EMAIL" },
     { key: "store_phone", value: "STORE_PHONE" },
-    { key: "free_shipping_threshold", value: "3000" },
-    { key: "default_shipping_cost", value: "200" },
+    { key: "free_shipping_threshold", value: "5000" },
+    { key: "default_shipping_cost", value: "250" },
   ];
   for (const s of settings) {
     await prisma.siteSetting.upsert({

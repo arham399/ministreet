@@ -11,6 +11,7 @@ const permissions: Record<string, Role[]> = {
   "users:write": ["OWNER"],
   "reviews:moderate": ["OWNER", "ADMIN", "SUPPORT"],
   "discounts:write": ["OWNER", "ADMIN"],
+  "newsletter:manage": ["OWNER", "ADMIN"],
 };
 
 export function can(role: Role | undefined | null, action: string): boolean {

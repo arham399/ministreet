@@ -3,6 +3,10 @@ export const SITE_TAGLINE = "Adorably Enchanting Treasures";
 export const SITE_URL = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 export const INSTAGRAM_HANDLE = "@mini_street.co";
 export const INSTAGRAM_URL = "https://instagram.com/mini_street.co";
+export const CONTACT_EMAIL = "ministreet.support@gmail.com";
+export const CONTACT_PHONE = "+92 336 5965896";
+export const CONTACT_PHONE_LINK = "tel:+923365965896";
+export const FACEBOOK_URL = "https://www.facebook.com/profile.php?id=61559864167910";
 
 export const CATEGORIES = [
   { name: "Earrings", slug: "earrings" },
@@ -28,8 +32,8 @@ export const ORDER_STATUSES = [
   "REFUNDED",
 ] as const;
 
-export const FREE_SHIPPING_THRESHOLD = 3000; // Rs.
-export const DEFAULT_SHIPPING_COST = 200; // Rs.
+export const FREE_SHIPPING_THRESHOLD = 5000; // Rs.
+export const DEFAULT_SHIPPING_COST = 250; // Rs.
 
 export const TRACKING_STATUS_COPY: Record<string, { title: string; description: string }> = {
   PLACED: {
