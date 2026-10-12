@@ -11,7 +11,7 @@ Built to the full AGENT.md production specification.
 ## Stack
 
 - **Next.js 15** (App Router) + TypeScript + Tailwind CSS 4
-- **SQLite** + Prisma ORM
+- **Supabase PostgreSQL** + Prisma ORM
 - **Auth.js (NextAuth v5)** — credentials, JWT, roles
 - **Zod** validation · **Zustand** cart/wishlist · **Recharts** analytics
 - **Gmail SMTP** order and newsletter emails · **Cloudinary** images · PDF invoices
@@ -23,12 +23,12 @@ Built to the full AGENT.md production specification.
 ```bash
 cd mini-street
 cp .env.example .env
-# Edit DATABASE_URL (SQLite file), AUTH_SECRET, OWNER_EMAIL, OWNER_PASSWORD
+# Set DATABASE_URL, DIRECT_URL, AUTH_SECRET, OWNER_EMAIL, OWNER_PASSWORD
 
 npm install
 npm run db:generate
-npm run db:migrate
-npm run db:seed
+npm run db:migrate:deploy
+# Optional: seed development/sample data only after reviewing prisma/seed.ts
 npm run dev
 ```
 
@@ -86,7 +86,7 @@ See `.env.example`:
 
 | Variable | Required |
 |----------|----------|
-| `DATABASE_URL` | Yes |
+| `DATABASE_URL` / `DIRECT_URL` | Yes |
 | `AUTH_SECRET` | Yes |
 | `NEXT_PUBLIC_APP_URL` | Yes |
 | `OWNER_EMAIL` / `OWNER_PASSWORD` | For seed owner; `OWNER_EMAIL` also receives newsletter notifications if `ORDER_NOTIFICATION_EMAIL` is unset |
@@ -98,10 +98,8 @@ See `.env.example`:
 
 ## Production deployment
 
-SQLite needs a persistent filesystem. Deploy to a host with a persistent
-volume; serverless platforms with ephemeral filesystems are not suitable for
-this SQLite database. Configure `DATABASE_URL` to point at the database file,
-run migrations, and seed the owner once. Do not ship demo customer data.
+Production uses Supabase PostgreSQL. Configure both Supabase connection URLs,
+then run the PostgreSQL migrations before deploying. Do not ship demo customer data.
 
 See `docs/deployment.md` and `docs/setup.md`.
 

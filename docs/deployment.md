@@ -2,47 +2,32 @@
 
 ## Database
 
-The Prisma schema currently uses SQLite. Set `DATABASE_URL` to a SQLite file
-such as `file:./dev.db`, then run migrations before starting the application:
+The production Prisma schema is PostgreSQL in `prisma/postgresql/schema.prisma` and is configured for Supabase. Set these environment variables in `.env` locally and in your deployment environment:
+
+- `DATABASE_URL`: Supabase transaction pooler URL (port 6543) for application traffic.
+- `DIRECT_URL`: Supabase session pooler URL (port 5432) for Prisma migrations.
+
+Keep database credentials private and out of source control. The root `prisma/schema.prisma` and root migration history are retained for the original SQLite development setup; production scripts use the PostgreSQL schema and its own migrations under `prisma/postgresql/migrations`.
+
+Generate the client and apply committed PostgreSQL migrations with:
 
 ```bash
-npx prisma migrate deploy
+npm run db:generate
+npm run db:migrate:deploy
 ```
 
-SQLite requires persistent disk storage. Do not use an ephemeral/serverless
-filesystem for production data; deploy to a host with a persistent volume and
-back up the database file regularly. Switching to a hosted PostgreSQL service
-requires changing the Prisma datasource and adapting/migrating the schema first.
+Do not run `db:seed` against production unless you have reviewed the seed data and intend to insert it. Configure the application environment with `AUTH_SECRET`, `NEXT_PUBLIC_APP_URL`, `GMAIL_USER`, `GMAIL_APP_PASSWORD`, `ORDER_NOTIFICATION_EMAIL`, and `CLOUDINARY_*` as needed.
 
 ## Other services
 
 - **Images:** Cloudinary
 - **Email:** Gmail SMTP using a Google App Password
 
-## Steps
-
-1. Choose a host with persistent disk storage for the SQLite database.
-2. Push this repo to GitHub.
-3. Set environment variables:
-   - `DATABASE_URL`
-   - `AUTH_SECRET` (`openssl rand -base64 32`)
-   - `NEXT_PUBLIC_APP_URL` (your production URL)
-   - `GMAIL_USER`, `GMAIL_APP_PASSWORD`, `ORDER_NOTIFICATION_EMAIL`
-   - `CLOUDINARY_*`
-4. Run migrations before starting the application:
-
-```bash
-npx prisma migrate deploy && next build
-```
-
-5. Deploy.
-6. Create the first OWNER account by running seed once with `OWNER_EMAIL` and `OWNER_PASSWORD` against the production database (or use a secure setup script).
-
 ## Post-deploy checklist
 
 - [ ] Homepage loads with logo
 - [ ] Shop / product pages work
-- [ ] Cart → checkout → order creates in DB
+- [ ] Cart → checkout → order creates in the database
 - [ ] Inventory decrements
 - [ ] Tracking page shows timeline
 - [ ] Admin can view and update orders

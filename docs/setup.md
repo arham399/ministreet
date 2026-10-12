@@ -13,8 +13,9 @@ npm install
 cp .env.example .env
 ```
 
-Set `DATABASE_URL` to `file:./dev.db`, then set the application secret and
-owner credentials in `.env`.
+Set `DATABASE_URL` to the Supabase transaction-pooler URL (port 6543)
+and `DIRECT_URL` to the session-pooler URL (port 5432). Also set the
+application secret and owner credentials in `.env`.
 
 Generate a secret:
 
@@ -26,7 +27,7 @@ openssl rand -base64 32
 
 ```bash
 npm run db:generate
-npm run db:migrate
+npm run db:migrate:deploy
 npm run db:seed
 ```
 
