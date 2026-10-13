@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
+import { and, eq, inArray, isNull } from "drizzle-orm";
 import { z } from "zod";
-import { prisma } from "@/lib/db/prisma";
+import { getDrizzleClient } from "@/lib/db/drizzle/client";
+import { product } from "@/lib/db/drizzle/schema";
 import {
   applyAutomaticDiscounts,
 } from "@/lib/discounts/apply-automatic-discounts";
-import { getActiveAutomaticDiscounts } from "@/lib/discounts/queries";
+import { getActiveAutomaticDiscountsWithDrizzle } from "@/lib/db/drizzle/queries/discounts";
 import { calculateSubtotal } from "@/lib/pricing/calculate";
 
 const quoteSchema = z.object({
@@ -23,10 +25,17 @@ export async function POST(request: NextRequest) {
 
     const { items } = parsed.data;
     const productIds = [...new Set(items.map((item) => item.productId))];
-    const products = await prisma.product.findMany({
-      where: { id: { in: productIds }, isActive: true, archivedAt: null },
-      select: { id: true, price: true, salePrice: true, categoryId: true },
-    });
+    const { db } = getDrizzleClient();
+    const products = await db.select({
+      id: product.id,
+      price: product.price,
+      salePrice: product.salePrice,
+      categoryId: product.categoryId,
+    }).from(product).where(and(
+      inArray(product.id, productIds),
+      eq(product.isActive, true),
+      isNull(product.archivedAt),
+    ));
     if (products.length !== productIds.length) {
       return NextResponse.json({ error: "One or more products in your cart are unavailable." }, { status: 400 });
     }
@@ -42,7 +51,7 @@ export async function POST(request: NextRequest) {
       };
     });
     const subtotalBeforeAutomaticDiscounts = calculateSubtotal(lines);
-    const rules = await getActiveAutomaticDiscounts();
+    const rules = await getActiveAutomaticDiscountsWithDrizzle();
     const prices = applyAutomaticDiscounts(
       products,
       rules,

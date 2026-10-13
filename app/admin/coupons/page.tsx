@@ -1,5 +1,7 @@
 import Link from "next/link";
-import { prisma } from "@/lib/db/prisma";
+import { desc } from "drizzle-orm";
+import { getDrizzleClient } from "@/lib/db/drizzle/client";
+import { coupon } from "@/lib/db/drizzle/schema";
 import { Button } from "@/components/ui/button";
 import { CouponActions } from "@/components/admin/coupon-actions";
 import { CouponStatus, type CouponStatusValue } from "@/components/admin/coupon-status";
@@ -22,7 +24,8 @@ export default async function AdminCouponsPage() {
     endsAt: Date | null;
   }[] = [];
   try {
-    coupons = await prisma.coupon.findMany({ orderBy: { createdAt: "desc" } });
+    const { db } = getDrizzleClient();
+    coupons = await db.select().from(coupon).orderBy(desc(coupon.createdAt));
   } catch { /* */ }
 
   return (
@@ -60,7 +63,9 @@ export default async function AdminCouponsPage() {
                   <td className="px-4 py-3 font-mono font-bold tracking-wide text-[var(--brand-pink)]">{c.code}</td>
                   <td className="px-4 py-3">{c.type}</td>
                   <td className="px-4 py-3">
-                    {c.type === "PERCENTAGE" ? `${c.value}%` : `Rs. ${c.value}`}
+                    {c.type === "PERCENTAGE"
+                      ? `${formatCouponValue(c.value)}%`
+                      : `Rs. ${formatCouponValue(c.value)}`}
                   </td>
                   <td className="px-4 py-3">
                     {c.usageCount}{c.usageLimit != null ? ` / ${c.usageLimit}` : ""}
@@ -100,6 +105,14 @@ export default async function AdminCouponsPage() {
       </div>
     </div>
   );
+}
+
+function formatCouponValue(value: unknown): string {
+  const amount = Number(value);
+  if (!Number.isFinite(amount)) return "—";
+  return amount.toLocaleString("en-PK", {
+    maximumFractionDigits: 2,
+  });
 }
 
 function getCouponStatus(coupon: {

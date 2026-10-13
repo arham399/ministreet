@@ -13,8 +13,9 @@ import {
   X,
   type LucideIcon,
 } from "lucide-react";
-import type { Prisma } from "@prisma/client";
-import { prisma } from "@/lib/db/prisma";
+import { asc, eq, or } from "drizzle-orm";
+import { getDrizzleClient } from "@/lib/db/drizzle/client";
+import { order as orderTable, orderItem, trackingEvent } from "@/lib/db/drizzle/schema";
 import { formatPrice } from "@/lib/utils";
 import { TRACKING_STATUS_COPY } from "@/lib/constants";
 import { cn } from "@/lib/utils";
@@ -44,9 +45,10 @@ const STATUS_ICONS: Record<string, LucideIcon> = {
   REFUNDED: WalletCards,
 };
 
-type TrackingOrder = Prisma.OrderGetPayload<{
-  include: { items: true; trackingEvents: true };
-}>;
+type TrackingOrder = typeof orderTable.$inferSelect & {
+  items: (typeof orderItem.$inferSelect)[];
+  trackingEvents: (typeof trackingEvent.$inferSelect)[];
+};
 
 type TrackingStep = {
   status: string;
@@ -59,22 +61,32 @@ export default async function TrackingDetailPage({ params }: Props) {
   const { trackingId } = await params;
   const decoded = decodeURIComponent(trackingId);
 
-  let order: TrackingOrder | null = null;
+  let foundOrder: TrackingOrder | null = null;
   try {
-    order = await prisma.order.findFirst({
-      where: {
-        OR: [{ trackingId: decoded }, { orderNumber: decoded }, { id: decoded }],
-      },
-      include: {
-        items: true,
-        trackingEvents: { orderBy: { eventAt: "asc" } },
-      },
-    });
+    const { db } = getDrizzleClient();
+    const [result] = await db
+      .select()
+      .from(orderTable)
+      .where(
+        or(
+          eq(orderTable.trackingId, decoded),
+          eq(orderTable.orderNumber, decoded),
+          eq(orderTable.id, decoded),
+        ),
+      )
+      .limit(1);
+    if (result) {
+      const [items, trackingEvents] = await Promise.all([
+        db.select().from(orderItem).where(eq(orderItem.orderId, result.id)),
+        db.select().from(trackingEvent).where(eq(trackingEvent.orderId, result.id)).orderBy(asc(trackingEvent.eventAt)),
+      ]);
+      foundOrder = { ...result, items, trackingEvents };
+    }
   } catch {
     // DB unavailable
   }
 
-  if (!order) {
+  if (!foundOrder) {
     return (
       <div className="mx-auto max-w-lg px-4 py-20 text-center">
         <h1 className="font-display text-3xl font-semibold mb-3">Order not found</h1>
@@ -88,6 +100,7 @@ export default async function TrackingDetailPage({ params }: Props) {
     );
   }
 
+  const order = foundOrder;
   const currentStatus = order.status;
   const currentIdx = STATUS_ORDER.indexOf(
     currentStatus as (typeof STATUS_ORDER)[number]

@@ -1,4 +1,6 @@
-import type { OrderStatus } from "@prisma/client";
+import type { orderStatusEnum } from "@/lib/db/drizzle/schema";
+
+export type OrderStatus = (typeof orderStatusEnum.enumValues)[number];
 
 export const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
   PLACED: "Order placed",

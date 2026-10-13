@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import crypto from "crypto";
-import { prisma } from "@/lib/db/prisma";
+import { and, eq } from "drizzle-orm";
+import { getDrizzleClient } from "@/lib/db/drizzle/client";
+import { user, verificationToken } from "@/lib/db/drizzle/schema";
 import { sendEmail } from "@/lib/email/client";
 
 const schema = z.object({ email: z.string().email() });
@@ -14,10 +16,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Valid email required" }, { status: 400 });
     }
     const email = parsed.data.email.toLowerCase();
-    const user = await prisma.user.findUnique({ where: { email } });
+    const { db } = getDrizzleClient();
+    const [foundUser] = await db
+      .select({ passwordHash: user.passwordHash })
+      .from(user)
+      .where(eq(user.email, email))
+      .limit(1);
 
     // Always return success to avoid email enumeration
-    if (!user || !user.passwordHash) {
+    if (!foundUser || !foundUser.passwordHash) {
       return NextResponse.json({
         success: true,
         message: "If an account exists, a reset link has been sent.",
@@ -27,15 +34,13 @@ export async function POST(req: NextRequest) {
     const token = crypto.randomBytes(32).toString("hex");
     const expires = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
 
-    await prisma.verificationToken.deleteMany({
-      where: { identifier: `reset:${email}` },
-    });
-    await prisma.verificationToken.create({
-      data: {
-        identifier: `reset:${email}`,
-        token,
-        expires,
-      },
+    await db
+    .delete(verificationToken)
+    .where(eq(verificationToken.identifier, `reset:${email}`));
+    await db.insert(verificationToken).values({
+      identifier: `reset:${email}`,
+      token,
+      expires,
     });
 
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";

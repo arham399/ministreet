@@ -1,5 +1,7 @@
 import Link from "next/link";
-import { prisma } from "@/lib/db/prisma";
+import { desc, eq } from "drizzle-orm";
+import { getDrizzleClient } from "@/lib/db/drizzle/client";
+import { invoice, order } from "@/lib/db/drizzle/schema";
 import { formatPrice } from "@/lib/utils";
 
 export const metadata = { title: "Invoices | Admin" };
@@ -12,15 +14,14 @@ export default async function AdminInvoicesPage() {
     order: { id: string; orderNumber: string; customerName: string; total: unknown };
   }[] = [];
   try {
-    invoices = await prisma.invoice.findMany({
-      orderBy: { issuedAt: "desc" },
-      take: 50,
-      include: {
-        order: {
-          select: { id: true, orderNumber: true, customerName: true, total: true },
-        },
-      },
-    });
+    const { db } = getDrizzleClient();
+    invoices = await db.select({
+      id: invoice.id,
+      invoiceNumber: invoice.invoiceNumber,
+      issuedAt: invoice.issuedAt,
+      order: { id: order.id, orderNumber: order.orderNumber, customerName: order.customerName, total: order.total },
+    }).from(invoice).innerJoin(order, eq(invoice.orderId, order.id))
+      .orderBy(desc(invoice.issuedAt)).limit(50);
   } catch { /* */ }
 
   return (

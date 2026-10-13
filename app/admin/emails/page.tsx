@@ -1,4 +1,6 @@
-import { prisma } from "@/lib/db/prisma";
+import { desc } from "drizzle-orm";
+import { getDrizzleClient } from "@/lib/db/drizzle/client";
+import { emailLog } from "@/lib/db/drizzle/schema";
 
 export const metadata = { title: "Emails | Admin" };
 
@@ -12,10 +14,8 @@ export default async function AdminEmailsPage() {
     createdAt: Date;
   }[] = [];
   try {
-    logs = await prisma.emailLog.findMany({
-      orderBy: { createdAt: "desc" },
-      take: 50,
-    });
+    const { db } = getDrizzleClient();
+    logs = await db.select().from(emailLog).orderBy(desc(emailLog.createdAt)).limit(50);
   } catch { /* */ }
 
   return (

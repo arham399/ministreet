@@ -1,10 +1,11 @@
 import { existsSync } from "node:fs";
 import path from "node:path";
-import { Prisma as PostgresPrisma, PrismaClient as PostgresClient } from "@prisma/client";
+import { Prisma as PostgresPrisma } from "@prisma/client";
 import {
   Prisma as SqlitePrisma,
   PrismaClient as SqliteClient,
 } from "@prisma/sqlite-client";
+import { Pool } from "pg";
 
 type DataRow = Record<string, unknown>;
 
@@ -89,6 +90,19 @@ function orderedModels() {
 function convertValue(value: unknown, type: string): unknown {
   if (value == null) return null;
   if (type === "Boolean") return Boolean(value);
+  if (type === "Decimal" || type === "BigInt") {
+    if (typeof value === "string") {
+      try {
+        const parsed: unknown = JSON.parse(value);
+        if (typeof parsed === "string" || typeof parsed === "number") {
+          return String(parsed);
+        }
+      } catch {
+        return value;
+      }
+    }
+    return String(value);
+  }
   if (type === "DateTime") {
     const date = value instanceof Date ? value : new Date(String(value));
     if (Number.isNaN(date.getTime())) {
@@ -119,7 +133,15 @@ async function main() {
   verifySchemaParity();
 
   const sqlite = new SqliteClient({ datasources: { db: { url: sourceUrl } } });
-  const postgres = new PostgresClient();
+  const postgresUrl = process.env.DATABASE_URL;
+  if (!postgresUrl) {
+    throw new Error("DATABASE_URL is required to transfer data into Supabase.");
+  }
+  const postgresPool = new Pool({
+    connectionString: postgresUrl,
+    connectionTimeoutMillis: 30_000,
+    max: 1,
+  });
 
   try {
     await sqlite.$connect();
@@ -134,26 +156,40 @@ async function main() {
       sourceRows.set(model.name, rows);
     }
 
-    const totalRows = [...sourceRows.values()].reduce((total, rows) => total + rows.length, 0);
+    const implicitJoinRows = await sqlite.$queryRawUnsafe<DataRow[]>(
+      `SELECT "A", "B" FROM "_CategoryToDiscount"`,
+    );
+    const totalRows =
+      [...sourceRows.values()].reduce((total, rows) => total + rows.length, 0) +
+      implicitJoinRows.length;
     console.info(
-      `${dryRun ? "Dry run: found" : "Found"} ${totalRows} local rows across ${models.length} tables.`,
+      `${dryRun ? "Dry run: found" : "Found"} ${totalRows} local rows across ${models.length + 1} tables.`,
     );
     if (dryRun) return;
 
-    await postgres.$connect();
     for (const model of models) {
       const tableName = model.dbName ?? model.name;
-      const result = await postgres.$queryRawUnsafe<Array<{ count: bigint }>>(
+      const result = await postgresPool.query<{ count: string }>(
         `SELECT COUNT(*) AS count FROM ${quoteIdentifier(tableName)}`,
       );
-      if (result[0]?.count !== BigInt(0)) {
+      if (Number(result.rows[0]?.count ?? 0) !== 0) {
         throw new Error(
           `Supabase table ${tableName} is not empty. Transfer stopped without importing data.`,
         );
       }
     }
+    const existingJoinRows = await postgresPool.query<{ count: string }>(
+      `SELECT COUNT(*) AS count FROM "_CategoryToDiscount"`,
+    );
+    if (Number(existingJoinRows.rows[0]?.count ?? 0) !== 0) {
+      throw new Error(
+        "Supabase table _CategoryToDiscount is not empty. Transfer stopped without importing data.",
+      );
+    }
 
-    await postgres.$transaction(async (tx) => {
+    const postgres = await postgresPool.connect();
+    await postgres.query("BEGIN");
+    try {
       for (const model of models) {
         const fields = scalarFields(model);
         const rows = sourceRows.get(model.name)!;
@@ -173,20 +209,38 @@ async function main() {
             return `(${placeholders.join(", ")})`;
           });
 
-          await tx.$executeRawUnsafe(
+          await postgres.query(
             `INSERT INTO ${tableName} (${columns.join(", ")}) VALUES ${tuples.join(", ")}`,
-            ...values,
+            values,
           );
         }
       }
-    });
+      for (let offset = 0; offset < implicitJoinRows.length; offset += 100) {
+        const batch = implicitJoinRows.slice(offset, offset + 100);
+        const values: unknown[] = [];
+        const tuples = batch.map((row) => {
+          values.push(row.A, row.B);
+          return `($${values.length - 1}, $${values.length})`;
+        });
+        await postgres.query(
+          `INSERT INTO "_CategoryToDiscount" ("A", "B") VALUES ${tuples.join(", ")}`,
+          values,
+        );
+      }
+      await postgres.query("COMMIT");
+    } catch (error) {
+      await postgres.query("ROLLBACK");
+      throw error;
+    } finally {
+      postgres.release();
+    }
 
     for (const model of models) {
       const tableName = model.dbName ?? model.name;
-      const result = await postgres.$queryRawUnsafe<Array<{ count: bigint }>>(
+      const result = await postgresPool.query<{ count: string }>(
         `SELECT COUNT(*) AS count FROM ${quoteIdentifier(tableName)}`,
       );
-      const importedCount = Number(result[0]?.count ?? BigInt(0));
+      const importedCount = Number(result.rows[0]?.count ?? 0);
       const expectedCount = sourceRows.get(model.name)!.length;
       if (importedCount !== expectedCount) {
         throw new Error(
@@ -194,10 +248,16 @@ async function main() {
         );
       }
     }
+    const importedJoinCount = await postgresPool.query<{ count: string }>(
+      `SELECT COUNT(*) AS count FROM "_CategoryToDiscount"`,
+    );
+    if (Number(importedJoinCount.rows[0]?.count ?? 0) !== implicitJoinRows.length) {
+      throw new Error("Row-count verification failed for _CategoryToDiscount.");
+    }
 
     console.info(`Successfully transferred ${totalRows} rows to Supabase.`);
   } finally {
-    await Promise.all([sqlite.$disconnect(), postgres.$disconnect()]);
+    await Promise.all([sqlite.$disconnect(), postgresPool.end()]);
   }
 }
 

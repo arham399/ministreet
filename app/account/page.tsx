@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { auth } from "@/lib/auth/config";
 import { redirect } from "next/navigation";
-import { prisma } from "@/lib/db/prisma";
+import { desc, eq, or } from "drizzle-orm";
+import { getDrizzleClient } from "@/lib/db/drizzle/client";
+import { order } from "@/lib/db/drizzle/schema";
 import { formatPrice } from "@/lib/utils";
 
 export const metadata = { title: "My Account" };
@@ -12,16 +14,22 @@ export default async function AccountPage() {
 
   let orders: { id: string; orderNumber: string; total: unknown; status: string; createdAt: Date }[] = [];
   try {
-    orders = await prisma.order.findMany({
-      where: {
-        OR: [
-          { userId: session.user.id },
-          { customerEmail: session.user.email },
-        ],
-      },
-      orderBy: { createdAt: "desc" },
-      take: 5,
-    });
+    const { db } = getDrizzleClient();
+    const identityFilter = session.user.email
+      ? or(eq(order.userId, session.user.id), eq(order.customerEmail, session.user.email))
+      : eq(order.userId, session.user.id);
+    orders = await db
+      .select({
+        id: order.id,
+        orderNumber: order.orderNumber,
+        total: order.total,
+        status: order.status,
+        createdAt: order.createdAt,
+      })
+      .from(order)
+      .where(identityFilter)
+      .orderBy(desc(order.createdAt))
+      .limit(5);
   } catch { /* DB offline */ }
 
   return (

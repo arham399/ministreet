@@ -1,5 +1,7 @@
 import Link from "next/link";
-import { prisma } from "@/lib/db/prisma";
+import { asc } from "drizzle-orm";
+import { getDrizzleClient } from "@/lib/db/drizzle/client";
+import { offer } from "@/lib/db/drizzle/schema";
 import { Button } from "@/components/ui/button";
 
 export const metadata = { title: "Offers | Admin" };
@@ -7,7 +9,8 @@ export const metadata = { title: "Offers | Admin" };
 export default async function AdminOffersPage() {
   let offers: { id: string; title: string; isActive: boolean; startsAt: Date | null; endsAt: Date | null }[] = [];
   try {
-    offers = await prisma.offer.findMany({ orderBy: { displayOrder: "asc" } });
+    const { db } = getDrizzleClient();
+    offers = await db.select().from(offer).orderBy(asc(offer.displayOrder));
   } catch { /* */ }
 
   return (

@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
-import { prisma } from "@/lib/db/prisma";
+import { and, eq } from "drizzle-orm";
+import { getDrizzleClient } from "@/lib/db/drizzle/client";
+import { user, verificationToken } from "@/lib/db/drizzle/schema";
 
 const schema = z.object({
   email: z.string().email(),
@@ -17,24 +19,27 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: parsed.error.errors[0]?.message }, { status: 400 });
     }
     const email = parsed.data.email.toLowerCase();
-    const record = await prisma.verificationToken.findFirst({
-      where: {
-        identifier: `reset:${email}`,
-        token: parsed.data.token,
-      },
-    });
-    if (!record || record.expires < new Date()) {
+    const { db } = getDrizzleClient();
+    const [record] = await db
+      .select({ expires: verificationToken.expires })
+      .from(verificationToken)
+      .where(and(
+        eq(verificationToken.identifier, `reset:${email}`),
+        eq(verificationToken.token, parsed.data.token),
+      ))
+      .limit(1);
+    if (!record || new Date(record.expires) < new Date()) {
       return NextResponse.json({ error: "Invalid or expired reset link" }, { status: 400 });
     }
 
     const passwordHash = await bcrypt.hash(parsed.data.password, 12);
-    await prisma.user.update({
-      where: { email },
-      data: { passwordHash },
-    });
-    await prisma.verificationToken.deleteMany({
-      where: { identifier: `reset:${email}` },
-    });
+    await db
+      .update(user)
+      .set({ passwordHash, updatedAt: new Date() })
+      .where(eq(user.email, email));
+    await db
+      .delete(verificationToken)
+      .where(eq(verificationToken.identifier, `reset:${email}`));
 
     return NextResponse.json({ success: true });
   } catch (err) {

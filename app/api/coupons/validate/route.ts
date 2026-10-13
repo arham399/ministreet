@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/db/prisma";
+import { and, eq, inArray, isNull, or } from "drizzle-orm";
+import { getDrizzleClient } from "@/lib/db/drizzle/client";
+import { coupon as couponsTable, order, product } from "@/lib/db/drizzle/schema";
 import { checkoutSchema } from "@/lib/validation/checkout";
 import { validateCouponForCart } from "@/lib/coupons/validate-coupon";
 import { z } from "zod";
 import { applyAutomaticDiscounts } from "@/lib/discounts/apply-automatic-discounts";
-import { getActiveAutomaticDiscounts } from "@/lib/discounts/queries";
+import { getActiveAutomaticDiscountsWithDrizzle } from "@/lib/db/drizzle/queries/discounts";
 import { calculateSubtotal } from "@/lib/pricing/calculate";
 
 const couponValidationSchema = z.object({
@@ -24,21 +26,23 @@ export async function POST(req: NextRequest) {
     }
     const request = parsed.data;
 
-    const coupon = await prisma.coupon.findUnique({
-      where: { code: request.code.toUpperCase() },
-    });
+    const { db } = getDrizzleClient();
+    const [coupon] = await db.select().from(couponsTable)
+      .where(eq(couponsTable.code, request.code.toUpperCase())).limit(1);
     if (!coupon) {
       return NextResponse.json({ valid: false, error: "Invalid coupon code." });
     }
 
-    const products = await prisma.product.findMany({
-      where: {
-        id: { in: request.items.map((item) => item.productId) },
-        isActive: true,
-        archivedAt: null,
-      },
-      select: { id: true, price: true, salePrice: true, categoryId: true },
-    });
+    const products = await db.select({
+      id: product.id,
+      price: product.price,
+      salePrice: product.salePrice,
+      categoryId: product.categoryId,
+    }).from(product).where(and(
+      inArray(product.id, request.items.map((item) => item.productId)),
+      eq(product.isActive, true),
+      isNull(product.archivedAt),
+    ));
     if (products.length !== new Set(request.items.map((item) => item.productId)).size) {
       return NextResponse.json({ valid: false, error: "One or more cart items are unavailable." });
     }
@@ -56,7 +60,7 @@ export async function POST(req: NextRequest) {
     });
     const automaticPrices = applyAutomaticDiscounts(
       products,
-      await getActiveAutomaticDiscounts(),
+      await getActiveAutomaticDiscountsWithDrizzle(),
       calculateSubtotal(baseLines),
     );
     const lines = baseLines.map((line) => ({
@@ -73,15 +77,13 @@ export async function POST(req: NextRequest) {
       });
     }
     if (coupon.perCustomerLimit != null) {
-      const priorCouponOrders = await prisma.order.findMany({
-        where: {
-          couponCode: coupon.code,
-          ...(coupon.campaignId === "legacy"
-            ? { OR: [{ couponCampaignId: "legacy" }, { couponCampaignId: null }] }
-            : { couponCampaignId: coupon.campaignId }),
-        },
-        select: { customerEmail: true },
-      });
+      const priorCouponOrders = await db.select({ customerEmail: order.customerEmail }).from(order)
+        .where(and(
+          eq(order.couponCode, coupon.code),
+          coupon.campaignId === "legacy"
+            ? or(eq(order.couponCampaignId, "legacy"), isNull(order.couponCampaignId))
+            : eq(order.couponCampaignId, coupon.campaignId),
+        ));
       customerUsageCount = priorCouponOrders.filter(
         (order) => order.customerEmail.toLowerCase() === customerEmail.toLowerCase(),
       ).length;

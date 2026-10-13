@@ -1,27 +1,37 @@
 import Link from "next/link";
-import { prisma } from "@/lib/db/prisma";
-import type { Prisma } from "@prisma/client";
+import { desc, eq, inArray } from "drizzle-orm";
+import { getDrizzleClient } from "@/lib/db/drizzle/client";
+import { category, categoryToDiscount, discount, discountProduct, product } from "@/lib/db/drizzle/schema";
 import { Button } from "@/components/ui/button";
 
 export const metadata = { title: "Discounts | Admin" };
 
-type DiscountWithTargets = Prisma.DiscountGetPayload<{
-  include: {
-    products: { include: { product: { select: { name: true } } } };
-    categories: { select: { name: true } };
-  };
-}>;
+type DiscountWithTargets = typeof discount.$inferSelect & {
+  products: { product: { name: string } }[];
+  categories: { name: string }[];
+};
 
 export default async function AdminDiscountsPage() {
   let discounts: DiscountWithTargets[] = [];
   try {
-    discounts = await prisma.discount.findMany({
-      orderBy: { createdAt: "desc" },
-      include: {
-        products: { include: { product: { select: { name: true } } } },
-        categories: { select: { name: true } },
-      },
-    });
+    const { db } = getDrizzleClient();
+    const rows = await db.select().from(discount).orderBy(desc(discount.createdAt));
+    const ids = rows.map((row) => row.id);
+    const [productRows, categoryRows] = ids.length ? await Promise.all([
+      db.select({ discountId: discountProduct.discountId, name: product.name })
+        .from(discountProduct).innerJoin(product, eq(discountProduct.productId, product.id))
+        .where(inArray(discountProduct.discountId, ids)),
+      db.select({ discountId: categoryToDiscount.b, name: category.name })
+        .from(categoryToDiscount).innerJoin(category, eq(categoryToDiscount.a, category.id))
+        .where(inArray(categoryToDiscount.b, ids)),
+    ]) : [[], []];
+    discounts = rows.map((row) => ({
+      ...row,
+      products: productRows.filter((entry) => entry.discountId === row.id)
+        .map((entry) => ({ product: { name: entry.name } })),
+      categories: categoryRows.filter((entry) => entry.discountId === row.id)
+        .map((entry) => ({ name: entry.name })),
+    }));
   } catch { /* */ }
   const now = new Date();
 

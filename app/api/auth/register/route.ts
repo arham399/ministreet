@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
-import { prisma } from "@/lib/db/prisma";
+import { eq } from "drizzle-orm";
+import { getDrizzleClient } from "@/lib/db/drizzle/client";
+import { user } from "@/lib/db/drizzle/schema";
 
 const schema = z.object({
   name: z.string().min(2).max(100),
@@ -18,23 +20,31 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: parsed.error.errors[0]?.message }, { status: 400 });
     }
     const email = parsed.data.email.toLowerCase();
-    const existing = await prisma.user.findUnique({ where: { email } });
+    const { db } = getDrizzleClient();
+    const [existing] = await db
+      .select({ id: user.id })
+      .from(user)
+      .where(eq(user.email, email))
+      .limit(1);
     if (existing) {
       return NextResponse.json({ error: "Email already registered" }, { status: 409 });
     }
     const passwordHash = await bcrypt.hash(parsed.data.password, 12);
-    const user = await prisma.user.create({
-      data: {
+    const [createdUser] = await db
+      .insert(user)
+      .values({
+        id: globalThis.crypto.randomUUID(),
         email,
         name: parsed.data.name,
         phone: parsed.data.phone,
         passwordHash,
         role: "CUSTOMER",
-      },
-    });
+        updatedAt: new Date(),
+      })
+      .returning({ id: user.id, email: user.email, name: user.name });
     return NextResponse.json({
       success: true,
-      user: { id: user.id, email: user.email, name: user.name },
+      user: createdUser,
     });
   } catch (err) {
     console.error(err);

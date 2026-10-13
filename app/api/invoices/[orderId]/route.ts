@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth, isAdminRole } from "@/lib/auth/config";
-import { prisma } from "@/lib/db/prisma";
+import { eq } from "drizzle-orm";
+import { getDrizzleClient } from "@/lib/db/drizzle/client";
+import { invoice, order, orderItem } from "@/lib/db/drizzle/schema";
 import { formatPrice } from "@/lib/utils";
 import { generateInvoicePdf } from "@/lib/invoice/generate";
 
@@ -11,17 +13,19 @@ export async function GET(req: NextRequest, ctx: Ctx) {
   const { orderId } = await ctx.params;
   const format = req.nextUrl.searchParams.get("format") || "html";
 
-  const order = await prisma.order.findUnique({
-    where: { id: orderId },
-    include: { items: true, invoice: true },
-  });
-  if (!order) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  const { db } = getDrizzleClient();
+  const [foundOrder] = await db.select().from(order).where(eq(order.id, orderId)).limit(1);
+  if (!foundOrder) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  const [items, invoices] = await Promise.all([
+    db.select().from(orderItem).where(eq(orderItem.orderId, orderId)),
+    db.select().from(invoice).where(eq(invoice.orderId, orderId)).limit(1),
+  ]);
 
   const isOwner =
     session?.user &&
     (isAdminRole(session.user.role) ||
-      order.userId === session.user.id ||
-      order.customerEmail === session.user.email);
+      foundOrder.userId === session.user.id ||
+      foundOrder.customerEmail === session.user.email);
 
   if (session && !isOwner && !isAdminRole(session.user?.role)) {
     // Guests can still access with order id (shareable after checkout)
@@ -38,8 +42,8 @@ export async function GET(req: NextRequest, ctx: Ctx) {
     });
   }
 
-  const inv = order.invoice?.invoiceNumber || `INV-${order.orderNumber}`;
-  const rows = order.items
+  const inv = invoices[0]?.invoiceNumber || `INV-${foundOrder.orderNumber}`;
+  const rows = items
     .map(
       (i) =>
         `<tr><td>${i.productNameSnapshot}</td><td>${i.quantity}</td><td>${formatPrice(Number(i.unitPrice))}</td><td>${formatPrice(Number(i.finalPrice))}</td></tr>`
@@ -66,19 +70,19 @@ export async function GET(req: NextRequest, ctx: Ctx) {
   <h1>Mini Street</h1>
   <p class="muted">Adorably Enchanting Treasures</p>
   <p><strong>Invoice:</strong> ${inv}<br/>
-  <strong>Order:</strong> ${order.orderNumber}<br/>
-  <strong>Date:</strong> ${new Date(order.createdAt).toLocaleDateString()}</p>
-  <p><strong>Bill to</strong><br/>${order.customerName}<br/>${order.customerEmail}<br/>${order.customerPhone}</p>
-  <p><strong>Ship to</strong><br/>${order.shippingLine1}<br/>${order.shippingCity}, ${order.shippingProvince}</p>
+  <strong>Order:</strong> ${foundOrder.orderNumber}<br/>
+  <strong>Date:</strong> ${new Date(foundOrder.createdAt).toLocaleDateString()}</p>
+  <p><strong>Bill to</strong><br/>${foundOrder.customerName}<br/>${foundOrder.customerEmail}<br/>${foundOrder.customerPhone}</p>
+  <p><strong>Ship to</strong><br/>${foundOrder.shippingLine1}<br/>${foundOrder.shippingCity}, ${foundOrder.shippingProvince}</p>
   <table>
     <thead><tr><th>Product</th><th>Qty</th><th>Price</th><th>Total</th></tr></thead>
     <tbody>${rows}</tbody>
   </table>
-  <p>Subtotal: ${formatPrice(Number(order.subtotal))}<br/>
-  Discount: ${formatPrice(Number(order.discountAmount))}<br/>
-  Shipping: ${formatPrice(Number(order.shippingAmount))}<br/>
-  <span class="total">Total: ${formatPrice(Number(order.total))}</span></p>
-  <p class="muted">Payment: ${order.paymentMethod}</p>
+  <p>Subtotal: ${formatPrice(Number(foundOrder.subtotal))}<br/>
+  Discount: ${formatPrice(Number(foundOrder.discountAmount))}<br/>
+  Shipping: ${formatPrice(Number(foundOrder.shippingAmount))}<br/>
+  <span class="total">Total: ${formatPrice(Number(foundOrder.total))}</span></p>
+  <p class="muted">Payment: ${foundOrder.paymentMethod}</p>
   <p class="muted">Thank you for shopping with Mini Street</p>
 </body></html>`;
 

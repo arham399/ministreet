@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
+import { asc, eq } from "drizzle-orm";
 import { auth, isAdminRole } from "@/lib/auth/config";
-import { prisma } from "@/lib/db/prisma";
+import { getDrizzleClient } from "@/lib/db/drizzle/client";
+import { offer } from "@/lib/db/drizzle/schema";
 import { offerSchema } from "@/lib/validation/coupon";
 
 export async function GET() {
-  const offers = await prisma.offer.findMany({
-    where: { isActive: true },
-    orderBy: { displayOrder: "asc" },
-  });
+  const { db } = getDrizzleClient();
+  const offers = await db.select().from(offer)
+    .where(eq(offer.isActive, true)).orderBy(asc(offer.displayOrder));
   return NextResponse.json({ offers });
 }
 
@@ -22,8 +23,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: parsed.error.errors[0]?.message }, { status: 400 });
   }
   const d = parsed.data;
-  const offer = await prisma.offer.create({
-    data: {
+  const { db } = getDrizzleClient();
+  const [createdOffer] = await db.insert(offer).values({
+      id: globalThis.crypto.randomUUID(),
+      updatedAt: new Date(),
       title: d.title,
       description: d.description,
       imageUrl: d.imageUrl,
@@ -32,7 +35,6 @@ export async function POST(req: NextRequest) {
       endsAt: d.endsAt ? new Date(d.endsAt) : null,
       isActive: d.isActive,
       displayOrder: d.displayOrder,
-    },
-  });
-  return NextResponse.json({ success: true, offer }, { status: 201 });
+    }).returning();
+  return NextResponse.json({ success: true, offer: createdOffer }, { status: 201 });
 }

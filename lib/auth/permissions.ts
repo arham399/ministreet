@@ -1,4 +1,6 @@
-import type { Role } from "@prisma/client";
+import type { roleEnum } from "@/lib/db/drizzle/schema";
+
+export type Role = (typeof roleEnum.enumValues)[number];
 
 const permissions: Record<string, Role[]> = {
   "products:read": ["OWNER", "ADMIN", "INVENTORY_MANAGER", "ORDER_MANAGER", "SUPPORT"],

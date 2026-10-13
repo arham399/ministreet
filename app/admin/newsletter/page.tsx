@@ -3,7 +3,9 @@ import { NewsletterCampaignForm } from "@/components/admin/newsletter-campaign-f
 import { NewsletterSubscriberStatus } from "@/components/admin/newsletter-subscriber-status";
 import { auth } from "@/lib/auth/config";
 import { can } from "@/lib/auth/permissions";
-import { prisma } from "@/lib/db/prisma";
+import { desc } from "drizzle-orm";
+import { getDrizzleClient } from "@/lib/db/drizzle/client";
+import { newsletterSubscriber } from "@/lib/db/drizzle/schema";
 
 export const metadata = { title: "Newsletter | Admin" };
 
@@ -13,10 +15,13 @@ export default async function AdminNewsletterPage() {
     notFound();
   }
 
-  const subscribers = await prisma.newsletterSubscriber.findMany({
-    orderBy: { createdAt: "desc" },
-    select: { id: true, email: true, isActive: true, createdAt: true },
-  });
+  const { db } = getDrizzleClient();
+  const subscribers = await db.select({
+    id: newsletterSubscriber.id,
+    email: newsletterSubscriber.email,
+    isActive: newsletterSubscriber.isActive,
+    createdAt: newsletterSubscriber.createdAt,
+  }).from(newsletterSubscriber).orderBy(desc(newsletterSubscriber.createdAt));
   const activeCount = subscribers.filter((subscriber) => subscriber.isActive).length;
 
   return (

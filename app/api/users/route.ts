@@ -1,28 +1,26 @@
 import { NextRequest, NextResponse } from "next/server";
+import { desc, eq, ne } from "drizzle-orm";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
 import { auth } from "@/lib/auth/config";
 import { can } from "@/lib/auth/permissions";
-import { prisma } from "@/lib/db/prisma";
-import type { Role } from "@prisma/client";
+import { getDrizzleClient } from "@/lib/db/drizzle/client";
+import { auditLog, user } from "@/lib/db/drizzle/schema";
 
 export async function GET() {
   const session = await auth();
   if (!session?.user || !can(session.user.role, "users:write")) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  const users = await prisma.user.findMany({
-    where: { role: { not: "CUSTOMER" } },
-    orderBy: { createdAt: "desc" },
-    select: {
-      id: true,
-      name: true,
-      email: true,
-      role: true,
-      isActive: true,
-      createdAt: true,
-    },
-  });
+  const { db } = getDrizzleClient();
+  const users = await db.select({
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    role: user.role,
+    isActive: user.isActive,
+    createdAt: user.createdAt,
+  }).from(user).where(ne(user.role, "CUSTOMER")).orderBy(desc(user.createdAt));
   return NextResponse.json({ users });
 }
 
@@ -44,30 +42,31 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: parsed.error.errors[0]?.message }, { status: 400 });
   }
   const email = parsed.data.email.toLowerCase();
-  const existing = await prisma.user.findUnique({ where: { email } });
+  const { db } = getDrizzleClient();
+  const [existing] = await db.select({ id: user.id }).from(user).where(eq(user.email, email)).limit(1);
   if (existing) {
     return NextResponse.json({ error: "Email already exists" }, { status: 409 });
   }
   const passwordHash = await bcrypt.hash(parsed.data.password, 12);
-  const user = await prisma.user.create({
-    data: {
-      email,
-      name: parsed.data.name,
-      passwordHash,
-      role: parsed.data.role as Role,
-    },
-  });
-  await prisma.auditLog.create({
-    data: {
-      actorId: session.user.id,
-      action: "USER_CREATED",
-      entityType: "User",
-      entityId: user.id,
-      metadata: { role: user.role, email: user.email },
-    },
+  const [createdUser] = await db.insert(user).values({
+    id: globalThis.crypto.randomUUID(),
+    updatedAt: new Date(),
+    email,
+    name: parsed.data.name,
+    passwordHash,
+    role: parsed.data.role,
+  }).returning();
+  if (!createdUser) throw new Error("Failed to create user");
+  await db.insert(auditLog).values({
+    id: globalThis.crypto.randomUUID(),
+    actorId: session.user.id,
+    action: "USER_CREATED",
+    entityType: "User",
+    entityId: createdUser.id,
+    metadata: { role: createdUser.role, email: createdUser.email },
   });
   return NextResponse.json({
     success: true,
-    user: { id: user.id, email: user.email, role: user.role },
+    user: { id: createdUser.id, email: createdUser.email, role: createdUser.role },
   });
 }

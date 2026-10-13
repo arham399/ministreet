@@ -1,5 +1,20 @@
-import type { Coupon } from "@prisma/client";
 import { calculateSubtotal, lineUnitPrice, type CartLine } from "@/lib/pricing/calculate";
+
+type Coupon = {
+  eligibleProductIds: unknown;
+  eligibleCategoryIds: unknown;
+  isActive: boolean;
+  startsAt: Date | null;
+  endsAt: Date | null;
+  usageLimit: number | null;
+  usageCount: number;
+  perCustomerLimit: number | null;
+  minOrderAmount: number | string | null;
+  type: "PERCENTAGE" | "FIXED_AMOUNT";
+  value: number | string;
+  maxDiscount: number | string | null;
+  code: string;
+};
 
 export type CouponCartLine = CartLine & {
   categoryId: string | null;

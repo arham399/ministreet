@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth/config";
-import { prisma } from "@/lib/db/prisma";
+import { and, eq } from "drizzle-orm";
+import { getDrizzleClient } from "@/lib/db/drizzle/client";
+import { product, productImage, wishlist, wishlistItem } from "@/lib/db/drizzle/schema";
 
 export async function GET() {
   const session = await auth();
@@ -8,44 +10,53 @@ export async function GET() {
     return NextResponse.json({ items: [], guest: true });
   }
 
-  let wishlist = await prisma.wishlist.findUnique({
-    where: { userId: session.user.id },
-    include: {
-      items: {
-        include: {
-          product: {
-            include: {
-              images: { where: { isPrimary: true }, take: 1 },
-            },
-          },
-        },
-      },
-    },
-  });
+  const { db } = getDrizzleClient();
+  let [customerWishlist] = await db
+    .select({ id: wishlist.id })
+    .from(wishlist)
+    .where(eq(wishlist.userId, session.user.id))
+    .limit(1);
 
-  if (!wishlist) {
-    wishlist = await prisma.wishlist.create({
-      data: { userId: session.user.id },
-      include: {
-        items: {
-          include: {
-            product: {
-              include: { images: { where: { isPrimary: true }, take: 1 } },
-            },
-          },
-        },
-      },
-    });
+  if (!customerWishlist) {
+    [customerWishlist] = await db
+      .insert(wishlist)
+      .values({
+        id: globalThis.crypto.randomUUID(),
+        userId: session.user.id,
+        updatedAt: new Date(),
+      })
+      .returning({ id: wishlist.id });
   }
 
-  const items = wishlist.items.map((i) => ({
-    productId: i.productId,
-    slug: i.product.slug,
-    name: i.product.name,
-    imageUrl: i.product.images[0]?.url ?? null,
-    unitPrice: Number(i.product.price),
-    salePrice: i.product.salePrice != null ? Number(i.product.salePrice) : null,
-  }));
+  const rows = await db
+    .select({
+      productId: wishlistItem.productId,
+      slug: product.slug,
+      name: product.name,
+      imageUrl: productImage.url,
+      price: product.price,
+      salePrice: product.salePrice,
+    })
+    .from(wishlistItem)
+    .innerJoin(product, eq(wishlistItem.productId, product.id))
+    .leftJoin(productImage, and(
+      eq(productImage.productId, product.id),
+      eq(productImage.isPrimary, true),
+    ))
+    .where(eq(wishlistItem.wishlistId, customerWishlist.id));
+  const seen = new Set<string>();
+  const items = rows.flatMap((row) => {
+    if (seen.has(row.productId)) return [];
+    seen.add(row.productId);
+    return [{
+      productId: row.productId,
+      slug: row.slug,
+      name: row.name,
+      imageUrl: row.imageUrl ?? null,
+      unitPrice: Number(row.price),
+      salePrice: row.salePrice != null ? Number(row.salePrice) : null,
+    }];
+  });
 
   return NextResponse.json({ items, guest: false });
 }
@@ -61,36 +72,50 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "productId required" }, { status: 400 });
   }
 
-  const product = await prisma.product.findUnique({ where: { id: productId } });
-  if (!product) {
+  const { db } = getDrizzleClient();
+  const [foundProduct] = await db
+    .select({ id: product.id })
+    .from(product)
+    .where(eq(product.id, productId))
+    .limit(1);
+  if (!foundProduct) {
     return NextResponse.json({ error: "Product not found" }, { status: 404 });
   }
 
-  let wishlist = await prisma.wishlist.findUnique({
-    where: { userId: session.user.id },
-  });
-  if (!wishlist) {
-    wishlist = await prisma.wishlist.create({
-      data: { userId: session.user.id },
-    });
+  let [customerWishlist] = await db
+    .select({ id: wishlist.id })
+    .from(wishlist)
+    .where(eq(wishlist.userId, session.user.id))
+    .limit(1);
+  if (!customerWishlist) {
+    [customerWishlist] = await db
+      .insert(wishlist)
+      .values({
+        id: globalThis.crypto.randomUUID(),
+        userId: session.user.id,
+        updatedAt: new Date(),
+      })
+      .returning({ id: wishlist.id });
   }
 
-  const existing = await prisma.wishlistItem.findUnique({
-    where: {
-      wishlistId_productId: {
-        wishlistId: wishlist.id,
-        productId,
-      },
-    },
-  });
+  const [existing] = await db
+    .select({ id: wishlistItem.id })
+    .from(wishlistItem)
+    .where(and(
+      eq(wishlistItem.wishlistId, customerWishlist.id),
+      eq(wishlistItem.productId, productId),
+    ))
+    .limit(1);
 
   if (existing) {
-    await prisma.wishlistItem.delete({ where: { id: existing.id } });
+    await db.delete(wishlistItem).where(eq(wishlistItem.id, existing.id));
     return NextResponse.json({ success: true, action: "removed" });
   }
 
-  await prisma.wishlistItem.create({
-    data: { wishlistId: wishlist.id, productId },
+  await db.insert(wishlistItem).values({
+    id: globalThis.crypto.randomUUID(),
+    wishlistId: customerWishlist.id,
+    productId,
   });
   return NextResponse.json({ success: true, action: "added" });
 }
@@ -101,13 +126,17 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const { productId } = await req.json();
-  const wishlist = await prisma.wishlist.findUnique({
-    where: { userId: session.user.id },
-  });
-  if (!wishlist) return NextResponse.json({ success: true });
+  const { db } = getDrizzleClient();
+  const [customerWishlist] = await db
+    .select({ id: wishlist.id })
+    .from(wishlist)
+    .where(eq(wishlist.userId, session.user.id))
+    .limit(1);
+  if (!customerWishlist) return NextResponse.json({ success: true });
 
-  await prisma.wishlistItem.deleteMany({
-    where: { wishlistId: wishlist.id, productId },
-  });
+  await db.delete(wishlistItem).where(and(
+    eq(wishlistItem.wishlistId, customerWishlist.id),
+    eq(wishlistItem.productId, productId),
+  ));
   return NextResponse.json({ success: true });
 }

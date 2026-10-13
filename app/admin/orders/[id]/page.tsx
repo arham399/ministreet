@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { prisma } from "@/lib/db/prisma";
+import { asc, desc, eq } from "drizzle-orm";
+import { getDrizzleClient } from "@/lib/db/drizzle/client";
+import { invoice, order as orderTable, orderItem, orderStatusHistory, trackingEvent } from "@/lib/db/drizzle/schema";
 import { formatPrice } from "@/lib/utils";
 import { OrderStatusControl } from "@/components/admin/order-status-control";
 
@@ -8,20 +10,30 @@ type Props = { params: Promise<{ id: string }> };
 
 export default async function AdminOrderDetailPage({ params }: Props) {
   const { id } = await params;
-  let order = null;
+  let foundOrder:
+    | ((typeof orderTable.$inferSelect) & {
+        items: (typeof orderItem.$inferSelect)[];
+        trackingEvents: (typeof trackingEvent.$inferSelect)[];
+        statusHistory: (typeof orderStatusHistory.$inferSelect)[];
+        invoice: typeof invoice.$inferSelect | null;
+      })
+    | null = null;
   try {
-    order = await prisma.order.findUnique({
-      where: { id },
-      include: {
-        items: true,
-        trackingEvents: { orderBy: { eventAt: "asc" } },
-        statusHistory: { orderBy: { createdAt: "desc" } },
-        invoice: true,
-      },
-    });
+    const { db } = getDrizzleClient();
+    const [result] = await db.select().from(orderTable).where(eq(orderTable.id, id)).limit(1);
+    if (result) {
+      const [items, trackingEvents, statusHistory, invoices] = await Promise.all([
+        db.select().from(orderItem).where(eq(orderItem.orderId, id)),
+        db.select().from(trackingEvent).where(eq(trackingEvent.orderId, id)).orderBy(asc(trackingEvent.eventAt)),
+        db.select().from(orderStatusHistory).where(eq(orderStatusHistory.orderId, id)).orderBy(desc(orderStatusHistory.createdAt)),
+        db.select().from(invoice).where(eq(invoice.orderId, id)).limit(1),
+      ]);
+      foundOrder = { ...result, items, trackingEvents, statusHistory, invoice: invoices[0] ?? null };
+    }
   } catch { /* */ }
 
-  if (!order) notFound();
+  if (!foundOrder) notFound();
+  const order = foundOrder;
 
   return (
     <div>

@@ -1,12 +1,17 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { prisma } from "@/lib/db/prisma";
+import { and, asc, eq } from "drizzle-orm";
+import { getDrizzleClient } from "@/lib/db/drizzle/client";
+import { category as categoryTable, product as productTable, productImage, review } from "@/lib/db/drizzle/schema";
 import { formatPrice, formatDiscount } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { AddToCartButton } from "@/components/product/add-to-cart-button";
 import { ProductImageGallery } from "@/components/product/product-image-gallery";
 import { Truck } from "lucide-react";
-import { applyAutomaticDiscounts } from "@/lib/discounts/apply-automatic-discounts";
+import {
+  applyAutomaticDiscounts,
+  type AutomaticDiscountRule,
+} from "@/lib/discounts/apply-automatic-discounts";
 import { getActiveAutomaticDiscounts } from "@/lib/discounts/queries";
 
 type Props = { params: Promise<{ slug: string }> };
@@ -14,11 +19,21 @@ type Props = { params: Promise<{ slug: string }> };
 export async function generateMetadata({ params }: Props) {
   const { slug } = await params;
   try {
-    const product = await prisma.product.findUnique({ where: { slug } });
-    if (!product) return { title: "Product" };
+    const { db } = getDrizzleClient();
+    const [foundProduct] = await db
+      .select({
+        name: productTable.name,
+        seoTitle: productTable.seoTitle,
+        seoDescription: productTable.seoDescription,
+        description: productTable.description,
+      })
+      .from(productTable)
+      .where(eq(productTable.slug, slug))
+      .limit(1);
+    if (!foundProduct) return { title: "Product" };
     return {
-      title: product.seoTitle || product.name,
-      description: product.seoDescription || product.description || undefined,
+      title: foundProduct.seoTitle || foundProduct.name,
+      description: foundProduct.seoDescription || foundProduct.description || undefined,
     };
   } catch {
     return { title: "Product" };
@@ -28,16 +43,44 @@ export async function generateMetadata({ params }: Props) {
 export default async function ProductPage({ params }: Props) {
   const { slug } = await params;
 
-  let product = null;
+  let product: (typeof productTable.$inferSelect & {
+    images: (typeof productImage.$inferSelect)[];
+    category: typeof categoryTable.$inferSelect | null;
+    reviews: (typeof review.$inferSelect)[];
+  }) | null = null;
   try {
-    product = await prisma.product.findUnique({
-      where: { slug },
-      include: {
-        images: { orderBy: { sortOrder: "asc" } },
-        category: true,
-        reviews: { where: { status: "APPROVED" }, take: 10 },
-      },
-    });
+    const { db } = getDrizzleClient();
+    const [foundProduct] = await db
+      .select()
+      .from(productTable)
+      .where(eq(productTable.slug, slug))
+      .limit(1);
+    if (foundProduct) {
+      const [images, categories, reviews] = await Promise.all([
+        db
+          .select()
+          .from(productImage)
+          .where(eq(productImage.productId, foundProduct.id))
+          .orderBy(asc(productImage.sortOrder)),
+        foundProduct.categoryId
+          ? db.select().from(categoryTable).where(eq(categoryTable.id, foundProduct.categoryId)).limit(1)
+          : Promise.resolve([]),
+        db
+          .select()
+          .from(review)
+          .where(and(
+            eq(review.productId, foundProduct.id),
+            eq(review.status, "APPROVED"),
+          ))
+          .limit(10),
+      ]);
+      product = {
+        ...foundProduct,
+        images,
+        category: categories[0] ?? null,
+        reviews,
+      };
+    }
   } catch {
     // DB offline
   }
@@ -111,7 +154,11 @@ export default async function ProductPage({ params }: Props) {
     );
   }
 
-  const discountRules = await getActiveAutomaticDiscounts();
+  const discountRules = (await getActiveAutomaticDiscounts()).map((rule) => ({
+    ...rule,
+    startsAt: rule.startsAt ? new Date(rule.startsAt) : null,
+    endsAt: rule.endsAt ? new Date(rule.endsAt) : null,
+  })) as AutomaticDiscountRule[];
   const basePrice = Number(product.salePrice ?? product.price);
   const automaticPrice = applyAutomaticDiscounts(
     [product],

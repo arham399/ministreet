@@ -1,7 +1,9 @@
 import Link from "next/link";
+import { desc, isNull } from "drizzle-orm";
 import { Button } from "@/components/ui/button";
 import { formatPrice } from "@/lib/utils";
-import { prisma } from "@/lib/db/prisma";
+import { getDrizzleClient } from "@/lib/db/drizzle/client";
+import { product } from "@/lib/db/drizzle/schema";
 
 export const metadata = { title: "Products | Admin" };
 
@@ -16,11 +18,11 @@ export default async function AdminProductsPage() {
     isActive: boolean;
   }[] = [];
   try {
-    products = await prisma.product.findMany({
-      where: { archivedAt: null },
-      orderBy: { createdAt: "desc" },
-      take: 100,
-    });
+    const { db } = getDrizzleClient();
+    products = await db.select().from(product)
+      .where(isNull(product.archivedAt))
+      .orderBy(desc(product.createdAt))
+      .limit(100);
   } catch { /* */ }
 
   return (

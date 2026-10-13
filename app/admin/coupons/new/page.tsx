@@ -1,21 +1,18 @@
 import Link from "next/link";
-import { prisma } from "@/lib/db/prisma";
+import { and, asc, eq, isNull } from "drizzle-orm";
+import { getDrizzleClient } from "@/lib/db/drizzle/client";
+import { category, product } from "@/lib/db/drizzle/schema";
 import CouponCreateForm from "@/components/admin/coupon-create-form";
 
 export const metadata = { title: "Add coupon | Admin" };
 
 export default async function NewCouponPage() {
+  const { db } = getDrizzleClient();
   const [products, categories] = await Promise.all([
-    prisma.product.findMany({
-      where: { isActive: true, archivedAt: null },
-      select: { id: true, name: true },
-      orderBy: { name: "asc" },
-    }),
-    prisma.category.findMany({
-      where: { isActive: true },
-      select: { id: true, name: true },
-      orderBy: { name: "asc" },
-    }),
+    db.select({ id: product.id, name: product.name }).from(product)
+      .where(and(eq(product.isActive, true), isNull(product.archivedAt))).orderBy(asc(product.name)),
+    db.select({ id: category.id, name: category.name }).from(category)
+      .where(eq(category.isActive, true)).orderBy(asc(category.name)),
   ]);
 
   return (

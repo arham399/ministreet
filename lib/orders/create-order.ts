@@ -2,7 +2,20 @@
  * Transactional order creation — server only.
  * Never trusts client prices. Recalculates everything from DB.
  */
-import { prisma } from "@/lib/db/prisma";
+import { and, count, eq, gte, inArray, isNull, lte, or, sql } from "drizzle-orm";
+import { getDrizzleClient } from "@/lib/db/drizzle/client";
+import {
+  coupon as couponTable,
+  discount,
+  inventoryMovement,
+  invoice,
+  order,
+  orderItem,
+  orderStatusHistory,
+  product,
+  productImage,
+  trackingEvent,
+} from "@/lib/db/drizzle/schema";
 import { calculateOrderTotals, calculateSubtotal, type CartLine } from "@/lib/pricing/calculate";
 import { generateOrderNumber, generateInvoiceNumber } from "@/lib/utils";
 import type { CheckoutInput } from "@/lib/validation/checkout";
@@ -17,15 +30,23 @@ export type CreateOrderResult =
 
 export async function createOrder(input: CheckoutInput): Promise<CreateOrderResult> {
   try {
+    const { db } = getDrizzleClient();
     const productIds = input.items.map((i) => i.productId);
-    const products = await prisma.product.findMany({
-      where: {
-        id: { in: productIds },
-        isActive: true,
-        archivedAt: null,
-      },
-      include: { images: { where: { isPrimary: true }, take: 1 } },
-    });
+    const productRows = await db
+      .select()
+      .from(product)
+      .where(and(inArray(product.id, productIds), eq(product.isActive, true), isNull(product.archivedAt)));
+    const primaryImages = productRows.length
+      ? await db
+          .select({ productId: productImage.productId, url: productImage.url })
+          .from(productImage)
+          .where(and(inArray(productImage.productId, productRows.map((item) => item.id)), eq(productImage.isPrimary, true)))
+      : [];
+    const imageByProduct = new Map(primaryImages.map((image) => [image.productId, image.url]));
+    const products = productRows.map((item) => ({
+      ...item,
+      images: imageByProduct.has(item.id) ? [{ url: imageByProduct.get(item.id)! }] : [],
+    }));
 
     if (products.length !== productIds.length) {
       return { success: false, error: "One or more products are unavailable." };
@@ -71,30 +92,34 @@ export async function createOrder(input: CheckoutInput): Promise<CreateOrderResu
     let couponCode: string | null = null;
     let couponCampaignId: string | null = null;
     if (input.couponCode) {
-      const coupon = await prisma.coupon.findUnique({
-        where: { code: input.couponCode.toUpperCase() },
-      });
+      const [coupon] = await db
+        .select()
+        .from(couponTable)
+        .where(eq(couponTable.code, input.couponCode.toUpperCase()))
+        .limit(1);
       if (!coupon) {
         return { success: false, error: "Invalid or inactive coupon code." };
       }
       let customerUsageCount = 0;
       if (coupon.perCustomerLimit != null) {
-        const priorCouponOrders = await prisma.order.findMany({
-          where: {
-            couponCode: coupon.code,
-            ...(coupon.campaignId === "legacy"
-              ? { OR: [{ couponCampaignId: "legacy" }, { couponCampaignId: null }] }
-              : { couponCampaignId: coupon.campaignId }),
-          },
-          select: { customerEmail: true },
-        });
+        const priorCouponOrders = await db
+          .select({ customerEmail: order.customerEmail })
+          .from(order)
+          .where(
+            and(
+              eq(order.couponCode, coupon.code),
+              coupon.campaignId === "legacy"
+                ? or(eq(order.couponCampaignId, "legacy"), isNull(order.couponCampaignId))
+                : eq(order.couponCampaignId, coupon.campaignId),
+            ),
+          );
         customerUsageCount = priorCouponOrders.filter(
           (order) => order.customerEmail.toLowerCase() === input.customerEmail.toLowerCase(),
         ).length;
       }
 
       const validation = validateCouponForCart(
-        coupon,
+        coupon as unknown as Parameters<typeof validateCouponForCart>[0],
         lines.map((line) => ({
           ...line,
           categoryId: productMap.get(line.productId)!.categoryId,
@@ -116,17 +141,18 @@ export async function createOrder(input: CheckoutInput): Promise<CreateOrderResu
 
     // Generate sequential-ish order number
     const year = new Date().getFullYear();
-    const count = await prisma.order.count({
-      where: { createdAt: { gte: new Date(`${year}-01-01`) } },
-    });
-    const orderNumber = generateOrderNumber(count + 1, year);
+    const [{ value: orderCount }] = await db
+      .select({ value: count() })
+      .from(order)
+      .where(gte(order.createdAt, new Date(`${year}-01-01`)));
+    const orderNumber = generateOrderNumber(orderCount + 1, year);
     const trackingId = orderNumber; // same for simplicity; can diverge later
-    const invoiceNumber = generateInvoiceNumber(count + 1, year);
+    const invoiceNumber = generateInvoiceNumber(orderCount + 1, year);
 
-    const order = await prisma.$transaction(async (tx) => {
+    const createdOrder = await db.transaction(async (tx) => {
       // Re-check stock inside transaction
       for (const item of input.items) {
-        const p = await tx.product.findUnique({ where: { id: item.productId } });
+        const [p] = await tx.select().from(product).where(eq(product.id, item.productId)).limit(1);
         if (!p) throw new Error("Product not found");
         const available = p.stockQuantity - p.reservedStock;
         if (p.trackInventory && available < item.quantity && !p.allowBackorder) {
@@ -138,17 +164,18 @@ export async function createOrder(input: CheckoutInput): Promise<CreateOrderResu
       for (const item of input.items) {
         const p = productMap.get(item.productId)!;
         if (p.trackInventory) {
-          await tx.product.update({
-            where: { id: item.productId },
-            data: { stockQuantity: { decrement: item.quantity } },
-          });
-          await tx.inventoryMovement.create({
-            data: {
-              productId: item.productId,
-              quantity: -item.quantity,
-              type: "SALE",
-              reason: `Order ${orderNumber}`,
-            },
+          await tx
+            .update(product)
+            .set({
+              stockQuantity: sql`${product.stockQuantity} - ${item.quantity}`,
+              updatedAt: new Date(),
+            })
+            .where(eq(product.id, item.productId));
+          await tx.insert(inventoryMovement).values({
+            productId: item.productId,
+            quantity: -item.quantity,
+            type: "SALE",
+            reason: `Order ${orderNumber}`,
           });
         }
       }
@@ -161,25 +188,30 @@ export async function createOrder(input: CheckoutInput): Promise<CreateOrderResu
       for (const discountId of appliedDiscountIds) {
         const rule = automaticDiscountRules.find((discount) => discount.id === discountId);
         if (!rule) continue;
-        const updated = await tx.discount.updateMany({
-          where: {
-            id: rule.id,
-            isActive: true,
-            usageCount: rule.usageCount,
-            usageLimit: rule.usageLimit,
-            OR: [{ startsAt: null }, { startsAt: { lte: new Date() } }],
-            AND: [{ OR: [{ endsAt: null }, { endsAt: { gte: new Date() } }] }],
-          },
-          data: { usageCount: { increment: 1 } },
-        });
-        if (updated.count !== 1) {
+        const now = new Date();
+        const updated = await tx
+          .update(discount)
+          .set({ usageCount: sql`${discount.usageCount} + 1`, updatedAt: now })
+          .where(
+            and(
+              eq(discount.id, rule.id),
+              eq(discount.isActive, true),
+              eq(discount.usageCount, rule.usageCount),
+              rule.usageLimit === null
+                ? isNull(discount.usageLimit)
+                : eq(discount.usageLimit, rule.usageLimit),
+              or(isNull(discount.startsAt), lte(discount.startsAt, now)),
+              or(isNull(discount.endsAt), gte(discount.endsAt, now)),
+            ),
+          )
+          .returning({ id: discount.id });
+        if (updated.length !== 1) {
           throw new Error("An applied discount changed while your order was being placed. Please review your cart and try again.");
         }
       }
 
       // Create order
-      const created = await tx.order.create({
-        data: {
+      const [created] = await tx.insert(order).values({
           orderNumber,
           trackingId,
           customerName: input.customerName,
@@ -191,61 +223,58 @@ export async function createOrder(input: CheckoutInput): Promise<CreateOrderResu
           shippingProvince: input.shippingProvince,
           shippingPostalCode: input.shippingPostalCode || null,
           deliveryNotes: input.deliveryNotes || null,
-          subtotal: totals.subtotal,
-          discountAmount: totals.discountAmount,
-          shippingAmount: totals.shippingAmount,
-          total: totals.total,
+          subtotal: String(totals.subtotal),
+          discountAmount: String(totals.discountAmount),
+          shippingAmount: String(totals.shippingAmount),
+          total: String(totals.total),
           paymentMethod: input.paymentMethod || "COD",
           paymentStatus: "PENDING",
           status: "PLACED",
           couponCode,
           couponCampaignId,
-          couponDiscount: couponDiscount > 0 ? couponDiscount : null,
-          items: {
-            create: input.items.map((item) => {
-              const p = productMap.get(item.productId)!;
-              const unit = automaticPrices.get(p.id)!.unitPrice;
-              return {
-                productId: p.id,
-                productNameSnapshot: p.name,
-                skuSnapshot: p.sku,
-                unitPrice: unit,
-                discountAmount: 0,
-                quantity: item.quantity,
-                finalPrice: unit * item.quantity,
-                imageUrlSnapshot: p.images[0]?.url || null,
-              };
-            }),
-          },
-          statusHistory: {
-            create: {
-              status: "PLACED",
-              note: "Order placed by customer",
-            },
-          },
-          trackingEvents: {
-            create: {
-              status: "PLACED",
-              title: TRACKING_STATUS_COPY.PLACED.title,
-              description: TRACKING_STATUS_COPY.PLACED.description,
-              eventAt: new Date(),
-            },
-          },
-          invoice: {
-            create: {
-              invoiceNumber,
-            },
-          },
-        },
+          couponDiscount: couponDiscount > 0 ? String(couponDiscount) : null,
+          updatedAt: new Date(),
+        }).returning();
+
+      await tx.insert(orderItem).values(
+        input.items.map((item) => {
+          const p = productMap.get(item.productId)!;
+          const unit = automaticPrices.get(p.id)!.unitPrice;
+          return {
+            orderId: created.id,
+            productId: p.id,
+            productNameSnapshot: p.name,
+            skuSnapshot: p.sku,
+            unitPrice: String(unit),
+            discountAmount: "0",
+            quantity: item.quantity,
+            finalPrice: String(unit * item.quantity),
+            imageUrlSnapshot: p.images[0]?.url || null,
+          };
+        }),
+      );
+      await tx.insert(orderStatusHistory).values({
+        orderId: created.id,
+        status: "PLACED",
+        note: "Order placed by customer",
       });
+      await tx.insert(trackingEvent).values({
+        orderId: created.id,
+        status: "PLACED",
+        title: TRACKING_STATUS_COPY.PLACED.title,
+        description: TRACKING_STATUS_COPY.PLACED.description,
+        eventAt: new Date(),
+      });
+      await tx.insert(invoice).values({ orderId: created.id, invoiceNumber });
 
       // Increment coupon usage
       if (couponCode && couponCampaignId) {
-        const couponUsageUpdate = await tx.coupon.updateMany({
-          where: { code: couponCode, campaignId: couponCampaignId },
-          data: { usageCount: { increment: 1 } },
-        });
-        if (couponUsageUpdate.count !== 1) {
+        const couponUsageUpdate = await tx
+          .update(couponTable)
+          .set({ usageCount: sql`${couponTable.usageCount} + 1`, updatedAt: new Date() })
+          .where(and(eq(couponTable.code, couponCode), eq(couponTable.campaignId, couponCampaignId)))
+          .returning({ id: couponTable.id });
+        if (couponUsageUpdate.length !== 1) {
           throw new Error("This coupon changed while your order was being placed. Please review it and try again.");
         }
       }
@@ -280,11 +309,11 @@ export async function createOrder(input: CheckoutInput): Promise<CreateOrderResu
         totals.discountAmount > 0 ? formatRupees(totals.discountAmount) : null;
       const customerEmail = sendEmail({
         to: input.customerEmail,
-        subject: `Your Mini Street order ${order.orderNumber} is confirmed`,
+        subject: `Your Mini Street order ${createdOrder.orderNumber} is confirmed`,
         html: orderReceivedEmailHtml({
           customerName: input.customerName,
-          orderNumber: order.orderNumber,
-          trackingId: order.trackingId,
+          orderNumber: createdOrder.orderNumber,
+          trackingId: createdOrder.trackingId,
           items: emailItems,
           subtotal: formatRupees(totals.subtotal),
           shipping:
@@ -292,23 +321,23 @@ export async function createOrder(input: CheckoutInput): Promise<CreateOrderResu
               ? formatRupees(totals.shippingAmount)
               : "Free",
           discount: emailDiscount,
-          total: formatRupees(Number(order.total)),
-          trackUrl: `${appUrl}/track-order/${order.trackingId}`,
+          total: formatRupees(Number(createdOrder.total)),
+          trackUrl: `${appUrl}/track-order/${createdOrder.trackingId}`,
         }),
         template: "order-received",
-        orderId: order.id,
+        orderId: createdOrder.id,
       });
       const notificationEmail = process.env.ORDER_NOTIFICATION_EMAIL || process.env.GMAIL_USER;
       const ownerEmail = notificationEmail
         ? sendEmail({
             to: notificationEmail,
-            subject: `New Mini Street order ${order.orderNumber}`,
+            subject: `New Mini Street order ${createdOrder.orderNumber}`,
             html: newOrderNotificationEmailHtml({
               customerName: input.customerName,
               customerEmail: input.customerEmail,
               customerPhone: input.customerPhone,
-              orderNumber: order.orderNumber,
-              trackingId: order.trackingId,
+              orderNumber: createdOrder.orderNumber,
+              trackingId: createdOrder.trackingId,
               items: emailItems,
               subtotal: formatRupees(totals.subtotal),
               shipping:
@@ -316,7 +345,7 @@ export async function createOrder(input: CheckoutInput): Promise<CreateOrderResu
                   ? formatRupees(totals.shippingAmount)
                   : "Free",
               discount: emailDiscount,
-              total: formatRupees(Number(order.total)),
+              total: formatRupees(Number(createdOrder.total)),
               shippingAddress: [
                 input.shippingLine1,
                 input.shippingLine2,
@@ -328,7 +357,7 @@ export async function createOrder(input: CheckoutInput): Promise<CreateOrderResu
                 .join(", "),
             }),
             template: "new-order-notification",
-            orderId: order.id,
+            orderId: createdOrder.id,
           })
         : Promise.resolve({
             success: false,
@@ -346,10 +375,10 @@ export async function createOrder(input: CheckoutInput): Promise<CreateOrderResu
 
     return {
       success: true,
-      orderId: order.id,
-      orderNumber: order.orderNumber,
-      trackingId: order.trackingId,
-      total: Number(order.total),
+      orderId: createdOrder.id,
+      orderNumber: createdOrder.orderNumber,
+      trackingId: createdOrder.trackingId,
+      total: Number(createdOrder.total),
     };
   } catch (err) {
     console.error("[createOrder]", err);

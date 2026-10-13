@@ -2,7 +2,9 @@
  * Generate a simple binary PDF invoice without external PDF libraries.
  * Produces valid PDF 1.4 with text content.
  */
-import { prisma } from "@/lib/db/prisma";
+import { eq } from "drizzle-orm";
+import { getDrizzleClient } from "@/lib/db/drizzle/client";
+import { invoice, order, orderItem } from "@/lib/db/drizzle/schema";
 
 function escapePdfText(s: string): string {
   return s.replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
@@ -48,31 +50,33 @@ export async function generateInvoicePdf(orderId: string): Promise<{
   buffer: Buffer;
   filename: string;
 } | null> {
-  const order = await prisma.order.findUnique({
-    where: { id: orderId },
-    include: { items: true, invoice: true },
-  });
-  if (!order) return null;
+  const { db } = getDrizzleClient();
+  const [foundOrder] = await db.select().from(order).where(eq(order.id, orderId)).limit(1);
+  if (!foundOrder) return null;
+  const [items, invoices] = await Promise.all([
+    db.select().from(orderItem).where(eq(orderItem.orderId, orderId)),
+    db.select().from(invoice).where(eq(invoice.orderId, orderId)).limit(1),
+  ]);
 
-  const inv = order.invoice?.invoiceNumber || `INV-${order.orderNumber}`;
+  const inv = invoices[0]?.invoiceNumber || `INV-${foundOrder.orderNumber}`;
   const lines: string[] = [
     "Adorably Enchanting Treasures",
     "",
     `Invoice: ${inv}`,
-    `Order: ${order.orderNumber}`,
-    `Date: ${order.createdAt.toISOString().slice(0, 10)}`,
+    `Order: ${foundOrder.orderNumber}`,
+    `Date: ${foundOrder.createdAt.toISOString().slice(0, 10)}`,
     "",
-    `Bill to: ${order.customerName}`,
-    order.customerEmail,
-    order.customerPhone,
+    `Bill to: ${foundOrder.customerName}`,
+    foundOrder.customerEmail,
+    foundOrder.customerPhone,
     "",
-    `Ship to: ${order.shippingLine1}`,
-    `${order.shippingCity}, ${order.shippingProvince}`,
+    `Ship to: ${foundOrder.shippingLine1}`,
+    `${foundOrder.shippingCity}, ${foundOrder.shippingProvince}`,
     "",
     "--- Items ---",
   ];
 
-  for (const item of order.items) {
+  for (const item of items) {
     lines.push(
       `${item.productNameSnapshot} x${item.quantity}  Rs.${Number(item.finalPrice).toFixed(0)}`
     );
@@ -80,12 +84,12 @@ export async function generateInvoicePdf(orderId: string): Promise<{
 
   lines.push(
     "",
-    `Subtotal: Rs.${Number(order.subtotal).toFixed(0)}`,
-    `Discount: Rs.${Number(order.discountAmount).toFixed(0)}`,
-    `Shipping: Rs.${Number(order.shippingAmount).toFixed(0)}`,
-    `TOTAL: Rs.${Number(order.total).toFixed(0)}`,
+    `Subtotal: Rs.${Number(foundOrder.subtotal).toFixed(0)}`,
+    `Discount: Rs.${Number(foundOrder.discountAmount).toFixed(0)}`,
+    `Shipping: Rs.${Number(foundOrder.shippingAmount).toFixed(0)}`,
+    `TOTAL: Rs.${Number(foundOrder.total).toFixed(0)}`,
     "",
-    `Payment: ${order.paymentMethod}`,
+    `Payment: ${foundOrder.paymentMethod}`,
     "",
     "Thank you for shopping with Mini Street"
   );

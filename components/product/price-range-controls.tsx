@@ -20,15 +20,43 @@ export function PriceRangeControls({
   const safeCeiling = Math.max(1, Math.ceil(ceiling));
   const [minimum, setMinimum] = useState(Math.min(minPrice ?? 0, safeCeiling));
   const [maximum, setMaximum] = useState(Math.min(maxPrice ?? safeCeiling, safeCeiling));
+  const [minimumInput, setMinimumInput] = useState(
+    minPrice != null && minPrice > 0 ? String(Math.min(minPrice, safeCeiling)) : "",
+  );
+  const [maximumInput, setMaximumInput] = useState(
+    maxPrice != null && maxPrice < safeCeiling ? String(Math.max(maxPrice, minPrice ?? 0)) : "",
+  );
 
   function updateMinimum(value: number) {
     const next = Math.max(0, Math.min(value, maximum, safeCeiling));
     setMinimum(next);
+    setMinimumInput(next === 0 ? "" : String(next));
   }
 
   function updateMaximum(value: number) {
     const next = Math.max(minimum, Math.min(value, safeCeiling));
     setMaximum(next);
+    setMaximumInput(next === safeCeiling ? "" : String(next));
+  }
+
+  function commitMinimum() {
+    const parsed = minimumInput.trim() === "" ? 0 : Number(minimumInput);
+    const next = Math.max(0, Math.min(Number.isFinite(parsed) ? parsed : 0, safeCeiling));
+    const nextMaximum = Math.max(maximum, next);
+    setMinimum(next);
+    setMaximum(nextMaximum);
+    setMinimumInput(next === 0 ? "" : String(next));
+    setMaximumInput(nextMaximum === safeCeiling ? "" : String(nextMaximum));
+  }
+
+  function commitMaximum() {
+    const parsed = maximumInput.trim() === "" ? safeCeiling : Number(maximumInput);
+    const next = Math.max(0, Math.min(Number.isFinite(parsed) ? parsed : safeCeiling, safeCeiling));
+    const nextMinimum = Math.min(minimum, next);
+    setMinimum(nextMinimum);
+    setMaximum(next);
+    setMinimumInput(nextMinimum === 0 ? "" : String(nextMinimum));
+    setMaximumInput(next === safeCeiling ? "" : String(next));
   }
 
   return (
@@ -37,14 +65,12 @@ export function PriceRangeControls({
         <label className="block">
           <span className="mb-1.5 block text-xs text-[var(--muted)]">Minimum</span>
           <input
-            type="number"
+            type="text"
             name="minPrice"
-            min="0"
-            max={maximum}
-            step="1"
             inputMode="numeric"
-            value={minimum || ""}
-            onChange={(event) => updateMinimum(Number(event.target.value) || 0)}
+            value={minimumInput}
+            onChange={(event) => setMinimumInput(event.target.value.replace(/[^\d]/g, ""))}
+            onBlur={commitMinimum}
             placeholder="Any"
             className="h-10 w-full rounded-[var(--radius-sm)] border border-[var(--border)] bg-white px-3 text-sm focus:border-[var(--brand-pink)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-pink)]/20"
           />
@@ -52,14 +78,12 @@ export function PriceRangeControls({
         <label className="block">
           <span className="mb-1.5 block text-xs text-[var(--muted)]">Maximum</span>
           <input
-            type="number"
+            type="text"
             name="maxPrice"
-            min={minimum}
-            max={safeCeiling}
-            step="1"
             inputMode="numeric"
-            value={maximum === safeCeiling ? "" : maximum}
-            onChange={(event) => updateMaximum(Number(event.target.value) || 0)}
+            value={maximumInput}
+            onChange={(event) => setMaximumInput(event.target.value.replace(/[^\d]/g, ""))}
+            onBlur={commitMaximum}
             placeholder="Any"
             className="h-10 w-full rounded-[var(--radius-sm)] border border-[var(--border)] bg-white px-3 text-sm focus:border-[var(--brand-pink)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-pink)]/20"
           />

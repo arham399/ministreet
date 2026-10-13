@@ -1,5 +1,7 @@
 import Link from "next/link";
-import { prisma } from "@/lib/db/prisma";
+import { desc, ne } from "drizzle-orm";
+import { getDrizzleClient } from "@/lib/db/drizzle/client";
+import { user } from "@/lib/db/drizzle/schema";
 import { Button } from "@/components/ui/button";
 
 export const metadata = { title: "Users & Roles | Admin" };
@@ -14,10 +16,10 @@ export default async function AdminUsersPage() {
     createdAt: Date;
   }[] = [];
   try {
-    users = await prisma.user.findMany({
-      where: { role: { not: "CUSTOMER" } },
-      orderBy: { createdAt: "desc" },
-    });
+    const { db } = getDrizzleClient();
+    users = await db.select().from(user)
+      .where(ne(user.role, "CUSTOMER"))
+      .orderBy(desc(user.createdAt));
   } catch { /* */ }
 
   return (

@@ -1,4 +1,6 @@
-﻿import { prisma } from "@/lib/db/prisma";
+import { and, asc, eq, isNull } from "drizzle-orm";
+import { getDrizzleClient } from "@/lib/db/drizzle/client";
+import { product } from "@/lib/db/drizzle/schema";
 
 export const metadata = { title: "Inventory | Admin" };
 
@@ -12,18 +14,17 @@ export default async function InventoryPage() {
     lowStockThreshold: number;
   }[] = [];
   try {
-    products = await prisma.product.findMany({
-      where: { archivedAt: null, trackInventory: true },
-      orderBy: { stockQuantity: "asc" },
-      select: {
-        id: true,
-        name: true,
-        sku: true,
-        stockQuantity: true,
-        reservedStock: true,
-        lowStockThreshold: true,
-      },
-    });
+    const { db } = getDrizzleClient();
+    products = await db.select({
+        id: product.id,
+        name: product.name,
+        sku: product.sku,
+        stockQuantity: product.stockQuantity,
+        reservedStock: product.reservedStock,
+        lowStockThreshold: product.lowStockThreshold,
+      }).from(product)
+      .where(and(isNull(product.archivedAt), eq(product.trackInventory, true)))
+      .orderBy(asc(product.stockQuantity));
   } catch { /* */ }
 
   const totalStock = products.reduce((s, p) => s + p.stockQuantity, 0);
@@ -95,4 +96,3 @@ export default async function InventoryPage() {
     </div>
   );
 }
-

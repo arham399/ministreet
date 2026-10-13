@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import type { OrderStatus } from "@prisma/client";
+import type { OrderStatus } from "@/lib/orders/status-transitions";
 import {
   ORDER_STATUS_LABELS,
   ORDER_STATUS_TRANSITIONS,

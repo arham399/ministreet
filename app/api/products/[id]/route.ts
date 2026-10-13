@@ -1,18 +1,26 @@
 import { NextRequest, NextResponse } from "next/server";
+import { asc, eq } from "drizzle-orm";
+import { getDrizzleClient } from "@/lib/db/drizzle/client";
+import { auditLog, category, product, productImage, productTag } from "@/lib/db/drizzle/schema";
 import { auth, isAdminRole } from "@/lib/auth/config";
-import { prisma } from "@/lib/db/prisma";
 import { productSchema } from "@/lib/validation/product";
 
 type Ctx = { params: Promise<{ id: string }> };
 
 export async function GET(_req: NextRequest, ctx: Ctx) {
   const { id } = await ctx.params;
-  const product = await prisma.product.findUnique({
-    where: { id },
-    include: { images: true, category: true, tags: true },
-  });
-  if (!product) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  return NextResponse.json({ ...product, tags: product.tags.map((tag) => tag.name) });
+  const { db } = getDrizzleClient();
+  const [productRows] = await Promise.all([
+    db.select().from(product).where(eq(product.id, id)).limit(1),
+  ]);
+  const found = productRows[0];
+  if (!found) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  const [images, tags, categories] = await Promise.all([
+    db.select().from(productImage).where(eq(productImage.productId, id)).orderBy(asc(productImage.sortOrder)),
+    db.select().from(productTag).where(eq(productTag.productId, id)),
+    found.categoryId ? db.select().from(category).where(eq(category.id, found.categoryId)).limit(1) : [],
+  ]);
+  return NextResponse.json({ ...found, images, category: categories[0] ?? null, tags: tags.map((tag) => tag.name) });
 }
 
 export async function PATCH(req: NextRequest, ctx: Ctx) {
@@ -27,59 +35,60 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
     return NextResponse.json({ error: parsed.error.errors[0]?.message }, { status: 400 });
   }
   const data = parsed.data;
-  const product = await prisma.product.update({
-    where: { id },
-    data: {
-      ...(data.name != null && { name: data.name }),
-      ...(data.slug != null && { slug: data.slug }),
-      ...(data.sku != null && { sku: data.sku }),
-      ...(data.description !== undefined && { description: data.description }),
-      ...(data.price != null && { price: data.price }),
-      ...(data.salePrice !== undefined && { salePrice: data.salePrice }),
-      ...(data.costPrice !== undefined && { costPrice: data.costPrice }),
-      ...(data.stockQuantity != null && { stockQuantity: data.stockQuantity }),
-      ...(data.lowStockThreshold != null && { lowStockThreshold: data.lowStockThreshold }),
-      ...(data.trackInventory != null && { trackInventory: data.trackInventory }),
-      ...(data.isActive != null && { isActive: data.isActive }),
-      ...(data.isNewArrival != null && { isNewArrival: data.isNewArrival }),
-      ...(data.isFeatured != null && { isFeatured: data.isFeatured }),
-      ...(data.categoryId !== undefined && { categoryId: data.categoryId }),
-      ...(data.tags != null && {
-        tags: {
-          deleteMany: {},
-          create: data.tags.map((name) => ({ name: name.toLowerCase() })),
-        },
-      }),
-      ...(data.seoTitle !== undefined && { seoTitle: data.seoTitle }),
-      ...(data.seoDescription !== undefined && { seoDescription: data.seoDescription }),
-    },
-    include: { tags: true },
-  });
+  const { db } = getDrizzleClient();
+  const result = await db.transaction(async (tx) => {
+    const update: Partial<typeof product.$inferInsert> = {};
+    update.updatedAt = new Date();
+    if (data.name != null) update.name = data.name;
+    if (data.slug != null) update.slug = data.slug;
+    if (data.sku != null) update.sku = data.sku;
+    if (data.description !== undefined) update.description = data.description;
+    if (data.price != null) update.price = String(data.price);
+    if (data.salePrice !== undefined) update.salePrice = data.salePrice == null ? null : String(data.salePrice);
+    if (data.costPrice !== undefined) update.costPrice = data.costPrice == null ? null : String(data.costPrice);
+    if (data.stockQuantity != null) update.stockQuantity = data.stockQuantity;
+    if (data.lowStockThreshold != null) update.lowStockThreshold = data.lowStockThreshold;
+    if (data.trackInventory != null) update.trackInventory = data.trackInventory;
+    if (data.allowBackorder != null) update.allowBackorder = data.allowBackorder;
+    if (data.isActive != null) update.isActive = data.isActive;
+    if (data.isNewArrival != null) update.isNewArrival = data.isNewArrival;
+    if (data.isFeatured != null) update.isFeatured = data.isFeatured;
+    if (data.badge !== undefined) update.badge = data.badge;
+    if (data.categoryId !== undefined) update.categoryId = data.categoryId;
+    if (data.seoTitle !== undefined) update.seoTitle = data.seoTitle;
+    if (data.seoDescription !== undefined) update.seoDescription = data.seoDescription;
 
-  if (data.imageUrls?.length) {
-    await prisma.productImage.deleteMany({ where: { productId: id } });
-    await prisma.productImage.createMany({
-      data: data.imageUrls.map((url, i) => ({
+    const [savedProduct] = await tx.update(product).set(update).where(eq(product.id, id)).returning();
+    if (!savedProduct) throw new Error("Product not found");
+    if (data.tags != null) {
+      await tx.delete(productTag).where(eq(productTag.productId, id));
+      if (data.tags.length) {
+        await tx.insert(productTag).values(data.tags.map((name) => ({ productId: id, name: name.toLowerCase() })));
+      }
+    }
+    if (data.imageUrls?.length) {
+      await tx.delete(productImage).where(eq(productImage.productId, id));
+      await tx.insert(productImage).values(data.imageUrls.map((url, i) => ({
         productId: id,
         url,
         isPrimary: i === 0,
         sortOrder: i,
-      })),
-    });
-  }
-
-  await prisma.auditLog.create({
-    data: {
+      })));
+    }
+    const tags = await tx.select().from(productTag).where(eq(productTag.productId, id));
+    await tx.insert(auditLog).values({
+      id: globalThis.crypto.randomUUID(),
       actorId: session.user.id,
       action: "PRODUCT_UPDATED",
       entityType: "Product",
       entityId: id,
-    },
+    });
+    return { ...savedProduct, tags };
   });
 
   return NextResponse.json({
     success: true,
-    product: { ...product, tags: product.tags.map((tag) => tag.name) },
+    product: { ...result, tags: result.tags.map((tag) => tag.name) },
   });
 }
 
@@ -90,17 +99,16 @@ export async function DELETE(_req: NextRequest, ctx: Ctx) {
   }
   const { id } = await ctx.params;
   // Soft delete
-  await prisma.product.update({
-    where: { id },
-    data: { archivedAt: new Date(), isActive: false },
-  });
-  await prisma.auditLog.create({
-    data: {
+  const { db } = getDrizzleClient();
+  await db.transaction(async (tx) => {
+    await tx.update(product).set({ archivedAt: new Date(), isActive: false, updatedAt: new Date() }).where(eq(product.id, id));
+    await tx.insert(auditLog).values({
+      id: globalThis.crypto.randomUUID(),
       actorId: session.user.id,
       action: "PRODUCT_ARCHIVED",
       entityType: "Product",
       entityId: id,
-    },
+    });
   });
   return NextResponse.json({ success: true });
 }

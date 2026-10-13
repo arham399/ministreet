@@ -1,4 +1,6 @@
-import { prisma } from "@/lib/db/prisma";
+import { asc, eq } from "drizzle-orm";
+import { getDrizzleClient } from "@/lib/db/drizzle/client";
+import { category } from "@/lib/db/drizzle/schema";
 import { ProductForm } from "@/components/admin/product-form";
 
 export const metadata = { title: "Add Product | Admin" };
@@ -6,11 +8,11 @@ export const metadata = { title: "Add Product | Admin" };
 export default async function NewProductPage() {
   let categories: { id: string; name: string }[] = [];
   try {
-    categories = await prisma.category.findMany({
-      where: { isActive: true },
-      orderBy: { displayOrder: "asc" },
-      select: { id: true, name: true },
-    });
+    const { db } = getDrizzleClient();
+    categories = await db.select({ id: category.id, name: category.name })
+      .from(category)
+      .where(eq(category.isActive, true))
+      .orderBy(asc(category.displayOrder));
   } catch { /* */ }
 
   return (

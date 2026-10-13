@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { prisma } from "@/lib/db/prisma";
+import { eq, or } from "drizzle-orm";
+import { getDrizzleClient } from "@/lib/db/drizzle/client";
+import { order as orderTable, orderItem } from "@/lib/db/drizzle/schema";
 import { formatPrice } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 
@@ -9,19 +11,25 @@ type Props = { params: Promise<{ orderId: string }> };
 export default async function OrderSuccessPage({ params }: Props) {
   const { orderId } = await params;
 
-  let order = null;
+  let foundOrder:
+    | (typeof orderTable.$inferSelect & { items: (typeof orderItem.$inferSelect)[] })
+    | null = null;
   try {
-    order = await prisma.order.findFirst({
-      where: {
-        OR: [{ id: orderId }, { orderNumber: orderId }, { trackingId: orderId }],
-      },
-      include: { items: true },
-    });
+    const { db } = getDrizzleClient();
+    const [result] = await db
+      .select()
+      .from(orderTable)
+      .where(or(eq(orderTable.id, orderId), eq(orderTable.orderNumber, orderId), eq(orderTable.trackingId, orderId)))
+      .limit(1);
+    if (result) {
+      const items = await db.select().from(orderItem).where(eq(orderItem.orderId, result.id));
+      foundOrder = { ...result, items };
+    }
   } catch {
     // DB may not be configured yet — show generic success with id
   }
 
-  if (!order) {
+  if (!foundOrder) {
     // Graceful fallback when DB offline or order not found
     return (
       <div className="mx-auto max-w-lg px-4 py-20 text-center">
@@ -44,6 +52,8 @@ export default async function OrderSuccessPage({ params }: Props) {
       </div>
     );
   }
+
+  const order = foundOrder;
 
   return (
     <div className="mx-auto max-w-lg px-4 py-20 text-center">

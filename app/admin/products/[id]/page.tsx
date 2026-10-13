@@ -1,5 +1,7 @@
 import { notFound } from "next/navigation";
-import { prisma } from "@/lib/db/prisma";
+import { asc, eq } from "drizzle-orm";
+import { getDrizzleClient } from "@/lib/db/drizzle/client";
+import { category, product as productsTable, productImage } from "@/lib/db/drizzle/schema";
 import { ProductForm } from "@/components/admin/product-form";
 
 type Props = { params: Promise<{ id: string }> };
@@ -9,17 +11,18 @@ export default async function EditProductPage({ params }: Props) {
   let product = null;
   let categories: { id: string; name: string }[] = [];
   try {
-    [product, categories] = await Promise.all([
-      prisma.product.findUnique({
-        where: { id },
-        include: { images: { orderBy: { sortOrder: "asc" } } },
-      }),
-      prisma.category.findMany({
-        where: { isActive: true },
-        orderBy: { displayOrder: "asc" },
-        select: { id: true, name: true },
-      }),
+    const { db } = getDrizzleClient();
+    const [productRows, categoryRows] = await Promise.all([
+      db.select().from(productsTable).where(eq(productsTable.id, id)).limit(1),
+      db.select({ id: category.id, name: category.name }).from(category)
+        .where(eq(category.isActive, true)).orderBy(asc(category.displayOrder)),
     ]);
+    const images = productRows.length
+      ? await db.select().from(productImage)
+        .where(eq(productImage.productId, id)).orderBy(asc(productImage.sortOrder))
+      : [];
+    product = productRows[0] ? { ...productRows[0], images } : null;
+    categories = categoryRows;
   } catch { /* */ }
 
   if (!product) notFound();

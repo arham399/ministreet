@@ -1,4 +1,6 @@
-import { prisma } from "@/lib/db/prisma";
+import { desc, eq } from "drizzle-orm";
+import { getDrizzleClient } from "@/lib/db/drizzle/client";
+import { product, review } from "@/lib/db/drizzle/schema";
 import { ReviewActions } from "@/components/admin/review-actions";
 
 export const metadata = { title: "Reviews | Admin" };
@@ -14,11 +16,17 @@ export default async function AdminReviewsPage() {
     product: { name: string } | null;
   }[] = [];
   try {
-    reviews = await prisma.review.findMany({
-      orderBy: { createdAt: "desc" },
-      take: 50,
-      include: { product: { select: { name: true } } },
-    });
+    const { db } = getDrizzleClient();
+    reviews = await db.select({
+      id: review.id,
+      authorName: review.authorName,
+      rating: review.rating,
+      title: review.title,
+      body: review.body,
+      status: review.status,
+      product: { name: product.name },
+    }).from(review).leftJoin(product, eq(review.productId, product.id))
+      .orderBy(desc(review.createdAt)).limit(50);
   } catch { /* */ }
 
   return (

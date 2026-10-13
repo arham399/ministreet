@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getDrizzleClient } from "@/lib/db/drizzle/client";
+import { auditLog, product, productImage, productTag } from "@/lib/db/drizzle/schema";
 import { auth, isAdminRole } from "@/lib/auth/config";
-import { prisma } from "@/lib/db/prisma";
 import { productSchema } from "@/lib/validation/product";
 import { getProducts } from "@/lib/db/queries/products";
 import { slugify } from "@/lib/utils";
@@ -45,15 +46,18 @@ export async function POST(req: NextRequest) {
     }
 
     const data = parsed.data;
-    const product = await prisma.product.create({
-      data: {
+    const { db } = getDrizzleClient();
+    const createdProduct = await db.transaction(async (tx) => {
+      const [savedProduct] = await tx.insert(product).values({
+        id: globalThis.crypto.randomUUID(),
+        updatedAt: new Date(),
         name: data.name,
         slug: data.slug,
         sku: data.sku,
         description: data.description,
-        price: data.price,
-        salePrice: data.salePrice,
-        costPrice: data.costPrice,
+        price: String(data.price),
+        salePrice: data.salePrice == null ? null : String(data.salePrice),
+        costPrice: data.costPrice == null ? null : String(data.costPrice),
         stockQuantity: data.stockQuantity,
         lowStockThreshold: data.lowStockThreshold,
         trackInventory: data.trackInventory,
@@ -63,42 +67,45 @@ export async function POST(req: NextRequest) {
         isFeatured: data.isFeatured,
         badge: data.badge,
         categoryId: data.categoryId || null,
-        tags: {
-          create: data.tags.map((name) => ({ name: name.toLowerCase() })),
-        },
         seoTitle: data.seoTitle,
         seoDescription: data.seoDescription,
-        images: data.imageUrls.length
-          ? {
-              create: data.imageUrls.map((url, i) => ({
-                url,
-                isPrimary: i === 0,
-                sortOrder: i,
-              })),
-            }
-          : undefined,
-      },
-      include: { images: true, tags: true },
-    });
-
-    await prisma.auditLog.create({
-      data: {
+      }).returning();
+      if (!savedProduct) throw new Error("Failed to create product");
+      if (data.tags.length) {
+        await tx.insert(productTag).values(data.tags.map((name) => ({
+          productId: savedProduct.id,
+          name: name.toLowerCase(),
+        })));
+      }
+      const images = data.imageUrls.length
+        ? await tx.insert(productImage).values(data.imageUrls.map((url, i) => ({
+          id: globalThis.crypto.randomUUID(),
+          productId: savedProduct.id,
+            url,
+            isPrimary: i === 0,
+            sortOrder: i,
+          }))).returning()
+        : [];
+      const tags = data.tags.map((name) => ({ name: name.toLowerCase() }));
+      await tx.insert(auditLog).values({
+        id: globalThis.crypto.randomUUID(),
         actorId: session.user.id,
         action: "PRODUCT_CREATED",
         entityType: "Product",
-        entityId: product.id,
-        metadata: { name: product.name, sku: product.sku },
-      },
+        entityId: savedProduct.id,
+        metadata: { name: savedProduct.name, sku: savedProduct.sku },
+      });
+      return { ...savedProduct, images, tags };
     });
 
     return NextResponse.json({
       success: true,
-      product: { ...product, tags: product.tags.map((tag) => tag.name) },
+      product: { ...createdProduct, tags: createdProduct.tags.map((tag) => tag.name) },
     }, { status: 201 });
   } catch (err: unknown) {
     console.error(err);
     const msg = err instanceof Error ? err.message : "Failed to create product";
-    if (msg.includes("Unique constraint")) {
+    if (msg.includes("Unique constraint") || (err && typeof err === "object" && "code" in err && err.code === "23505")) {
       return NextResponse.json({ error: "SKU or slug already exists" }, { status: 409 });
     }
     return NextResponse.json({ error: msg }, { status: 500 });

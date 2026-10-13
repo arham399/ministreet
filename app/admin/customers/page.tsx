@@ -1,5 +1,7 @@
 import Link from "next/link";
-import { prisma } from "@/lib/db/prisma";
+import { count, desc, eq, isNull, sql, sum } from "drizzle-orm";
+import { getDrizzleClient } from "@/lib/db/drizzle/client";
+import { order, user } from "@/lib/db/drizzle/schema";
 import { formatPrice } from "@/lib/utils";
 
 export const metadata = { title: "Customers | Admin" };
@@ -18,27 +20,40 @@ export default async function AdminCustomersPage() {
   let guestSpend: { email: string; name: string; orders: number; total: number }[] = [];
 
   try {
-    customers = await prisma.user.findMany({
-      where: { role: "CUSTOMER" },
-      orderBy: { createdAt: "desc" },
-      take: 100,
-      include: { _count: { select: { orders: true } } },
-    });
+    const { db } = getDrizzleClient();
+    const customerRows = await db.select({
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      phone: user.phone,
+      role: user.role,
+      createdAt: user.createdAt,
+      orderCount: count(order.id),
+    }).from(user).leftJoin(order, eq(user.id, order.userId))
+      .where(eq(user.role, "CUSTOMER"))
+      .groupBy(user.id)
+      .orderBy(desc(user.createdAt))
+      .limit(100);
+    customers = customerRows.map(({ orderCount, ...customer }) => ({
+      ...customer,
+      _count: { orders: orderCount },
+    }));
 
     // Guest customers from orders without userId
-    const guests = await prisma.order.groupBy({
-      by: ["customerEmail", "customerName"],
-      where: { userId: null },
-      _count: true,
-      _sum: { total: true },
-      orderBy: { _count: { customerEmail: "desc" } },
-      take: 50,
-    });
+    const guests = await db.select({
+      email: order.customerEmail,
+      name: order.customerName,
+      orders: count(),
+      total: sum(order.total),
+    }).from(order).where(isNull(order.userId))
+      .groupBy(order.customerEmail, order.customerName)
+      .orderBy(sql`count(${order.customerEmail}) desc`)
+      .limit(50);
     guestSpend = guests.map((g) => ({
-      email: g.customerEmail,
-      name: g.customerName,
-      orders: g._count,
-      total: Number(g._sum.total ?? 0),
+      email: g.email,
+      name: g.name,
+      orders: g.orders,
+      total: Number(g.total ?? 0),
     }));
   } catch { /* */ }
 

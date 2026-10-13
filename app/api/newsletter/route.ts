@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { prisma } from "@/lib/db/prisma";
+import { eq } from "drizzle-orm";
+import { getDrizzleClient } from "@/lib/db/drizzle/client";
+import { newsletterSubscriber } from "@/lib/db/drizzle/schema";
 import {
   newsletterSubscriptionNotificationEmailHtml,
   newsletterWelcomeEmailHtml,
@@ -18,15 +20,19 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Valid email required" }, { status: 400 });
     }
     const email = parsed.data.email.trim().toLowerCase();
-    const existing = await prisma.newsletterSubscriber.findUnique({
-      where: { email },
-      select: { isActive: true },
-    });
-    await prisma.newsletterSubscriber.upsert({
-      where: { email },
-      update: { isActive: true },
-      create: { email },
-    });
+    const { db } = getDrizzleClient();
+    const [existing] = await db
+      .select({ isActive: newsletterSubscriber.isActive })
+      .from(newsletterSubscriber)
+      .where(eq(newsletterSubscriber.email, email))
+      .limit(1);
+    await db
+      .insert(newsletterSubscriber)
+      .values({ id: globalThis.crypto.randomUUID(), email, isActive: true })
+      .onConflictDoUpdate({
+        target: newsletterSubscriber.email,
+        set: { isActive: true },
+      });
 
     if (!existing?.isActive) {
       const notificationEmail =

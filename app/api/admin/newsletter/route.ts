@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
+import { asc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { auth } from "@/lib/auth/config";
 import { can } from "@/lib/auth/permissions";
-import { prisma } from "@/lib/db/prisma";
+import { getDrizzleClient } from "@/lib/db/drizzle/client";
+import { newsletterSubscriber } from "@/lib/db/drizzle/schema";
 import { newsletterCampaignEmailHtml, sendEmail } from "@/lib/email/client";
 import { SITE_URL } from "@/lib/constants";
 
@@ -86,11 +88,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error, fieldErrors }, { status: 400 });
   }
 
-  const subscribers = await prisma.newsletterSubscriber.findMany({
-    where: { isActive: true },
-    select: { email: true },
-    orderBy: { createdAt: "asc" },
-  });
+  const { db } = getDrizzleClient();
+  const subscribers = await db.select({ email: newsletterSubscriber.email })
+    .from(newsletterSubscriber)
+    .where(eq(newsletterSubscriber.isActive, true))
+    .orderBy(asc(newsletterSubscriber.createdAt));
   if (subscribers.length === 0) {
     return NextResponse.json({ error: "There are no active subscribers to email" }, { status: 400 });
   }
@@ -159,11 +161,11 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: "Subscriber id and active status are required" }, { status: 400 });
   }
 
-  const subscriber = await prisma.newsletterSubscriber.update({
-    where: { id: parsed.data.id },
-    data: { isActive: parsed.data.isActive },
-    select: { id: true, isActive: true },
-  });
+  const [subscriber] = await getDrizzleClient().db.update(newsletterSubscriber)
+    .set({ isActive: parsed.data.isActive })
+    .where(eq(newsletterSubscriber.id, parsed.data.id))
+    .returning({ id: newsletterSubscriber.id, isActive: newsletterSubscriber.isActive });
+  if (!subscriber) return NextResponse.json({ error: "Subscriber not found" }, { status: 404 });
 
   return NextResponse.json({ success: true, subscriber });
 }

@@ -23,16 +23,15 @@ async function logEmail(data: {
   orderId?: string;
 }) {
   try {
-    const { prisma } = await import("@/lib/db/prisma");
-    await prisma.emailLog.create({
-      data: {
-        to: data.to,
-        subject: data.subject,
-        template: data.template,
-        status: data.status,
-        error: data.error,
-        orderId: data.orderId,
-      },
+    const { getDrizzleClient } = await import("@/lib/db/drizzle/client");
+    const { emailLog } = await import("@/lib/db/drizzle/schema");
+    await getDrizzleClient().db.insert(emailLog).values({
+      to: data.to,
+      subject: data.subject,
+      template: data.template,
+      status: data.status,
+      error: data.error ?? null,
+      orderId: data.orderId ?? null,
     });
   } catch (err) {
     console.error("[email:log]", err);
