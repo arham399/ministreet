@@ -17,10 +17,11 @@ Set `DATABASE_URL` to the Supabase transaction-pooler URL (port 6543)
 and `DIRECT_URL` to the session-pooler URL (port 5432). Also set the
 application secret and owner credentials in `.env`.
 
-The app uses Prisma with Supabase PostgreSQL; it does not use Supabase Auth.
-Keep database credentials and any future Supabase service-role key server-side.
-Payment-proof uploads are not enabled yet; when implemented, they must use a
-private Supabase Storage bucket rather than a public URL.
+The app uses Drizzle ORM with Supabase PostgreSQL; it does not use Supabase Auth.
+Set `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` from your Supabase project
+for secure payment-proof uploads. Keep the service-role key server-side; never
+prefix it with `NEXT_PUBLIC_` or commit it. A migration creates the private
+`payment-proofs` bucket. The admin page uses expiring signed links to view proofs.
 
 Generate a secret:
 
@@ -30,11 +31,17 @@ openssl rand -base64 32
 
 ## 3. Database
 
+For an existing Supabase database whose application tables are already present,
+record the Drizzle baseline once, then use Drizzle migrations:
+
 ```bash
-npm run db:generate
-npm run db:migrate:deploy
-npm run db:seed
+npm run db:drizzle:migrate:mark-existing
+npm run db:migrate
 ```
+
+For a new, empty Supabase database, apply the checked-in baseline with
+`npm run db:migrate`. Seed sample data only when it is intended:
+`npm run db:seed`.
 
 ## 4. Develop
 
@@ -52,8 +59,9 @@ npm run dev
 
 ### Gmail order notifications
 
-The app emails the customer an order confirmation and sends your support inbox
-an order summary. In the Google Account for `ministreet.support@gmail.com`:
+The app emails the customer an order-received/payment-review message and sends
+your support inbox an order summary with an admin link. Payment proofs are not
+attached to emails. In the Google Account for `ministreet.support@gmail.com`:
 
 1. Enable 2-Step Verification.
 2. Create an App Password in your Google Account's App passwords settings.

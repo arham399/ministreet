@@ -18,6 +18,64 @@ export function isCloudinaryConfigured() {
   );
 }
 
+function cloudinaryPublicIdFromUrl(imageUrl: string, cloudName: string) {
+  try {
+    const url = new URL(imageUrl);
+    if (url.hostname !== "res.cloudinary.com") return null;
+    const parts = url.pathname.split("/").filter(Boolean);
+    if (parts[0] !== cloudName || parts[1] !== "image" || parts[2] !== "upload") return null;
+    const versionIndex = parts.findIndex((part, index) => index > 2 && /^v\d+$/.test(part));
+    if (versionIndex < 0) return null;
+    const publicId = parts.slice(versionIndex + 1).join("/").replace(/\.[^/.]+$/, "");
+    return publicId.startsWith("mini-street/products/") ? publicId : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function deleteProductImagesFromCloudinary(imageUrls: string[]) {
+  const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
+  const apiKey = process.env.CLOUDINARY_API_KEY;
+  const apiSecret = process.env.CLOUDINARY_API_SECRET;
+  if (!cloudName || !apiKey || !apiSecret) {
+    return { deleted: 0, skipped: imageUrls.length, failed: 0 };
+  }
+
+  let deleted = 0;
+  let skipped = 0;
+  let failed = 0;
+  const crypto = await import("crypto");
+  for (const imageUrl of imageUrls) {
+    const publicId = cloudinaryPublicIdFromUrl(imageUrl, cloudName);
+    if (!publicId) {
+      skipped++;
+      continue;
+    }
+    const timestamp = Math.floor(Date.now() / 1000);
+    const signature = crypto.createHash("sha1")
+      .update(`public_id=${publicId}&timestamp=${timestamp}${apiSecret}`)
+      .digest("hex");
+    const body = new FormData();
+    body.set("public_id", publicId);
+    body.set("timestamp", String(timestamp));
+    body.set("api_key", apiKey);
+    body.set("signature", signature);
+    try {
+      const response = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/destroy`, {
+        method: "POST",
+        body,
+        cache: "no-store",
+      });
+      const result = await response.json() as { result?: string };
+      if (response.ok && (result.result === "ok" || result.result === "not found")) deleted++;
+      else failed++;
+    } catch {
+      failed++;
+    }
+  }
+  return { deleted, skipped, failed };
+}
+
 export async function uploadImage(
   buffer: Buffer,
   filename: string,

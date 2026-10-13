@@ -1,98 +1,113 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-import { Menu, X } from "lucide-react";
+import {
+  Activity, BarChart3, Boxes, FolderTree, LayoutDashboard, Mail,
+  Menu, Package, Search, Settings, ShoppingBag, TicketPercent,
+  Truck, Users, WalletCards, X, Tags, Star, FileSpreadsheet,
+} from "lucide-react";
 import { can } from "@/lib/auth/permissions";
+import { LogoutButton } from "@/components/admin/logout-button";
 
 const SIDEBAR = [
-  { label: "Dashboard", href: "/admin" },
+  { label: "Dashboard", href: "/admin", icon: LayoutDashboard },
   { section: "Catalog" },
-  { label: "Products", href: "/admin/products" },
-  { label: "Categories", href: "/admin/categories" },
-  { label: "Inventory", href: "/admin/inventory" },
+  { label: "Products", href: "/admin/products", icon: Package },
+  { label: "Categories", href: "/admin/categories", icon: FolderTree },
+  { label: "Inventory", href: "/admin/inventory", icon: Boxes },
   { section: "Sales" },
-  { label: "Orders", href: "/admin/orders" },
-  { label: "Customers", href: "/admin/customers" },
-  { label: "Discounts", href: "/admin/discounts" },
-  { label: "Coupons", href: "/admin/coupons" },
-  { label: "Offers", href: "/admin/offers" },
+  { label: "Orders", href: "/admin/orders", icon: ShoppingBag },
+  { label: "Customers", href: "/admin/customers", icon: Users },
+  { label: "Discounts", href: "/admin/discounts", icon: Tags },
+  { label: "Coupons", href: "/admin/coupons", icon: TicketPercent },
+  { label: "Offers", href: "/admin/offers", icon: WalletCards },
   { section: "Engagement" },
-  { label: "Reviews", href: "/admin/reviews" },
-  { label: "Newsletter", href: "/admin/newsletter" },
-  { section: "Analytics" },
-  { label: "Analytics", href: "/admin/analytics" },
-  { section: "Documents" },
-  { label: "Invoices", href: "/admin/invoices" },
+  { label: "Reviews", href: "/admin/reviews", icon: Star },
+  { label: "Newsletter", href: "/admin/newsletter", icon: Mail },
+  { section: "Analytics & reports" },
+  { label: "Analytics", href: "/admin/analytics", icon: BarChart3 },
+  { label: "Email log", href: "/admin/emails", icon: Activity },
+  { label: "Invoices", href: "/admin/invoices", icon: FileSpreadsheet },
+  { label: "Database exports", href: "/admin/exports", icon: FileSpreadsheet },
   { section: "System" },
-  { label: "Settings", href: "/admin/settings" },
-];
+  { label: "Staff & roles", href: "/admin/users", icon: Users },
+  { label: "Settings", href: "/admin/settings", icon: Settings },
+] as const;
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const { data: session } = useSession();
   const canManageNewsletter = can(session?.user?.role, "newsletter:manage");
-  if (pathname === "/admin/login") {
-    return <>{children}</>;
-  }
+  const canExportDatabase = can(session?.user?.role, "analytics:read");
+  const visibleItem = (href: string) =>
+    (href !== "/admin/newsletter" || canManageNewsletter) &&
+    (href !== "/admin/exports" || canExportDatabase);
+
+  if (pathname === "/admin/login") return <>{children}</>;
+
+  const navigation = (mobile = false) => SIDEBAR.map((item, index) => {
+    if ("section" in item) {
+      return <p key={`section-${index}`} className="px-3 pb-1 pt-5 text-[10px] font-semibold uppercase tracking-[.18em] text-white/40">{item.section}</p>;
+    }
+    if (!visibleItem(item.href)) return null;
+    const Icon = item.icon;
+    const active = item.href === "/admin" ? pathname === item.href : pathname === item.href || pathname.startsWith(`${item.href}/`);
+    return (
+      <Link key={item.href} href={item.href} onClick={mobile ? () => setMobileNavOpen(false) : undefined}
+        aria-current={active ? "page" : undefined}
+        className={`group flex items-center gap-3 rounded-xl px-3 py-2.5 text-[13px] transition ${active ? "bg-[#e91e8c] text-white shadow-[0_8px_24px_rgba(233,30,140,.24)]" : "text-white/70 hover:bg-white/8 hover:text-white"}`}>
+        <Icon size={17} strokeWidth={1.8} className={active ? "text-white" : "text-white/50 group-hover:text-[#f5a5d2]"} />
+        <span>{item.label}</span>
+      </Link>
+    );
+  });
 
   return (
-    <div className="min-h-screen flex bg-[#f7f5f6]">
-      <aside className="hidden lg:flex w-56 shrink-0 flex-col border-r border-[var(--border)] bg-white">
-        <div className="p-4 border-b border-[var(--border)]">
-          <Link href="/admin" className="font-display text-lg font-semibold text-[var(--brand-pink)]">
-            Mini Street
+    <div className="admin-shell min-h-screen bg-[#f8f5f7] lg:flex">
+      <aside className="fixed inset-y-0 left-0 z-40 hidden w-[252px] flex-col border-r border-white/8 bg-[#211820] text-white lg:flex">
+        <div className="flex h-[76px] items-center border-b border-white/10 px-5">
+          <Link href="/admin" aria-label="Mini Street admin home" className="inline-flex items-center gap-3">
+            <Image src="/brand/logo.png" alt="Mini Street" width={46} height={46} className="h-10 w-10 rounded-full bg-white object-contain p-1" priority />
+            <span><span className="block font-display text-[19px] font-semibold leading-5 text-white">Mini Street</span><span className="mt-1 block text-[9px] uppercase tracking-[.2em] text-[#f2a4ce]">Studio · Admin</span></span>
           </Link>
-          <p className="text-[10px] uppercase tracking-wider text-[var(--muted)]">Admin</p>
         </div>
-        <nav className="flex-1 overflow-y-auto py-3 px-2">
-          {SIDEBAR.map((item, i) =>
-            item.href === "/admin/newsletter" && !canManageNewsletter ? null : item.section ? (
-              <p key={i} className="px-3 pt-4 pb-1 text-[10px] font-semibold uppercase tracking-wider text-[var(--muted)]">
-                {item.section}
-              </p>
-            ) : (
-              <Link
-                key={item.href}
-                href={item.href!}
-                className={`block px-3 py-2 text-sm rounded-[var(--radius-sm)] transition-colors ${
-                  pathname === item.href
-                    ? "bg-[var(--brand-blush)] text-[var(--brand-pink)] font-medium"
-                    : "text-[var(--charcoal)] hover:bg-[var(--brand-blush)] hover:text-[var(--brand-pink)]"
-                }`}
-              >
-                {item.label}
-              </Link>
-            )
-          )}
-        </nav>
-        <div className="p-3 border-t border-[var(--border)]">
-          <Link href="/" className="text-xs text-[var(--muted)] hover:text-[var(--brand-pink)]">
-            ← View storefront
-          </Link>
+        <nav className="admin-sidebar-nav flex-1 overflow-y-auto px-3 py-3">{navigation()}</nav>
+        <div className="space-y-2 border-t border-white/10 p-3">
+          <Link href="/" className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-xs text-white/60 transition hover:bg-white/8 hover:text-white"><Truck size={16} />View storefront</Link>
+          <LogoutButton />
         </div>
       </aside>
-      <div className="flex min-h-screen min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center justify-between border-b border-[var(--border)] bg-white px-4 lg:px-6">
-          <div className="flex items-center gap-2">
-            <button type="button" className="rounded-lg p-2 text-[var(--charcoal)] hover:bg-[var(--brand-blush)] lg:hidden" onClick={() => setMobileNavOpen((open) => !open)} aria-label={mobileNavOpen ? "Close admin menu" : "Open admin menu"} aria-expanded={mobileNavOpen}>
-              {mobileNavOpen ? <X size={19} /> : <Menu size={19} />}
-            </button>
-            <span className="lg:hidden font-display font-semibold text-[var(--brand-pink)]">Mini Street Admin</span>
+
+      <div className="min-w-0 flex-1 lg:pl-[252px]">
+        <header className="sticky top-0 z-30 flex min-h-[68px] items-center gap-3 border-b border-[#eee5eb] bg-white/95 px-3 backdrop-blur-xl sm:px-5 lg:px-8">
+          <button type="button" className="grid h-10 w-10 shrink-0 place-items-center rounded-xl text-[#342a32] hover:bg-[#f8edf3] lg:hidden" onClick={() => setMobileNavOpen((open) => !open)} aria-label={mobileNavOpen ? "Close admin menu" : "Open admin menu"} aria-expanded={mobileNavOpen}>
+            {mobileNavOpen ? <X size={20} /> : <Menu size={20} />}
+          </button>
+          <Link href="/admin" className="flex shrink-0 items-center gap-2 lg:hidden" aria-label="Mini Street admin home">
+            <Image src="/brand/logo.png" alt="" width={34} height={34} className="h-8 w-8 object-contain" />
+            <span className="hidden font-display text-lg font-semibold text-[#c2186b] xs:inline">Mini Street</span>
+          </Link>
+          <form action="/admin/search" method="get" role="search" className="relative ml-auto flex min-w-0 max-w-[560px] flex-1 items-center lg:ml-0">
+            <Search size={17} aria-hidden="true" className="pointer-events-none absolute left-3.5 text-[#8b7e87]" />
+            <input name="q" type="search" minLength={2} maxLength={100} placeholder="Search products, orders, customers…" aria-label="Search all admin records" className="h-10 w-full rounded-full border border-[#eee3e9] bg-[#fffafc] pl-10 pr-4 text-xs outline-none transition placeholder:text-[#9c9098] focus:border-[#e91e8c] focus:bg-white sm:text-sm" />
+          </form>
+          <div className="hidden min-w-0 items-center gap-2 border-l border-[#eee5eb] pl-4 sm:flex">
+            <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[#fcecf3] text-xs font-semibold uppercase text-[#c2186b]">{session?.user?.name?.slice(0, 1) || "M"}</div>
+            <div className="min-w-0"><p className="max-w-36 truncate text-xs font-semibold text-[#342a32]">{session?.user?.name || "Store team"}</p><p className="text-[10px] uppercase tracking-wider text-[#91858e]">{session?.user?.role?.replaceAll("_", " ") || "Admin"}</p></div>
           </div>
-          <div className="ml-auto text-sm text-[var(--muted)]">Owner</div>
+          <div className="sm:hidden"><LogoutButton compact /></div>
         </header>
+
         {mobileNavOpen && <>
-          <button aria-label="Close menu" className="fixed inset-0 z-30 bg-black/25 lg:hidden" onClick={() => setMobileNavOpen(false)} />
-          <nav className="fixed inset-y-14 left-0 z-40 w-[min(19rem,88vw)] overflow-y-auto border-r border-[var(--border)] bg-white px-3 py-3 shadow-soft-lg lg:hidden">
-            {SIDEBAR.map((item, i) => item.href === "/admin/newsletter" && !canManageNewsletter ? null : item.section ? <p key={i} className="px-3 pb-1 pt-4 text-[10px] font-semibold uppercase tracking-wider text-[var(--muted)]">{item.section}</p> : <Link key={item.href} href={item.href!} onClick={() => setMobileNavOpen(false)} className={`block rounded-lg px-3 py-2.5 text-sm ${pathname === item.href ? "bg-[var(--brand-blush)] font-medium text-[var(--brand-pink)]" : "text-[var(--charcoal)] hover:bg-[var(--brand-blush)]"}`}>{item.label}</Link>)}
-            <div className="mt-4 border-t border-[var(--border)] pt-3"><Link href="/" onClick={() => setMobileNavOpen(false)} className="block px-3 py-2 text-xs text-[var(--muted)]">← View storefront</Link></div>
-          </nav>
+          <button aria-label="Close menu" className="fixed inset-0 z-30 bg-[#211820]/50 backdrop-blur-[2px] lg:hidden" onClick={() => setMobileNavOpen(false)} />
+          <nav className="admin-sidebar-nav fixed inset-y-[68px] left-0 z-40 w-[min(19rem,88vw)] overflow-y-auto bg-[#211820] px-3 py-3 text-white shadow-2xl lg:hidden">{navigation(true)}<div className="mt-3 border-t border-white/10 pt-3"><Link href="/" onClick={() => setMobileNavOpen(false)} className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-xs text-white/60"><Truck size={16} />View storefront</Link><LogoutButton /></div></nav>
         </>}
-        <main className="min-w-0 flex-1 overflow-x-hidden p-3 sm:p-4 lg:overflow-auto lg:p-6">{children}</main>
+        <main className="admin-main min-w-0 p-3 sm:p-5 lg:p-8">{children}</main>
       </div>
     </div>
   );

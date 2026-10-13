@@ -3,12 +3,12 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Check, ClipboardCheck, MapPin, UserRound } from "lucide-react";
+import { Check, ClipboardCheck, Copy, MapPin, UserRound } from "lucide-react";
 import { useCartStore } from "@/lib/cart/store";
 import { formatPrice } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { FREE_SHIPPING_THRESHOLD, DEFAULT_SHIPPING_COST } from "@/lib/constants";
+import { DEFAULT_SHIPPING_COST, FREE_SHIPPING_THRESHOLD, PAYMENT_ACCOUNT } from "@/lib/constants";
 import { CartHydration } from "@/components/providers/cart-provider";
 import { PakistanLocationFields } from "@/components/checkout/pakistan-location-fields";
 import { useCartDiscountQuote } from "@/hooks/use-cart-discount-quote";
@@ -26,6 +26,7 @@ function CheckoutForm() {
   const formRef = useRef<HTMLFormElement>(null);
   const [currentStep, setCurrentStep] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [accountCopied, setAccountCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [couponCode, setCouponCode] = useState("");
   const [couponMessage, setCouponMessage] = useState("");
@@ -126,7 +127,7 @@ function CheckoutForm() {
       shippingProvince: String(formData.get("shippingProvince") || ""),
       shippingPostalCode: String(formData.get("shippingPostalCode") || "") || null,
       deliveryNotes: String(formData.get("deliveryNotes") || "") || null,
-      paymentMethod: "COD" as const,
+      paymentMethod: "BANK_TRANSFER" as const,
       couponCode: appliedCoupon?.code ?? null,
       items: items.map((i) => ({
         productId: i.productId,
@@ -135,10 +136,15 @@ function CheckoutForm() {
     };
 
     try {
+      const requestBody = new FormData();
+      requestBody.set("checkoutData", JSON.stringify(payload));
+      const paymentProof = formData.get("paymentProof");
+      if (paymentProof instanceof File && paymentProof.size > 0) {
+        requestBody.set("paymentProof", paymentProof);
+      }
       const res = await fetch("/api/checkout", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        body: requestBody,
       });
       const data = await res.json();
       if (!res.ok || !data.success) {
@@ -370,7 +376,7 @@ function CheckoutForm() {
             <div className="mb-5">
               <p className="section-label">Step 3 of 3</p>
               <h2 className="mt-1 font-display text-2xl font-semibold">Review & place order</h2>
-              <p className="mt-1 text-sm text-[var(--muted)]">Check your details and choose your payment method.</p>
+              <p className="mt-1 text-sm text-[var(--muted)]">Transfer the order total, then submit your payment confirmation for review.</p>
             </div>
             {reviewDetails && (
               <div className="mb-5 space-y-4 rounded-[var(--radius-md)] border border-[var(--border)] bg-white p-4">
@@ -407,17 +413,61 @@ function CheckoutForm() {
                 </div>
               </div>
             )}
-            <div className="rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--brand-cream)] p-4">
-              <h3 className="mb-3 text-sm font-semibold">Payment method</h3>
-              <label className="flex items-center gap-3 cursor-pointer">
-                <input type="radio" name="payment" value="COD" required defaultChecked className="accent-[var(--brand-pink)]" />
-                <span className="text-sm font-medium">
-                  Cash on Delivery <span aria-hidden="true" className="text-[var(--error)]">*</span>
-                </span>
-              </label>
-              <p className="text-xs text-[var(--muted)] mt-2 ml-6">
-                Pay when your order arrives. More payment options coming soon.
+            <div className="rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--brand-cream)] p-4 sm:p-5">
+              <p className="section-label">Advance payment</p>
+              <h3 className="mt-1 text-base font-semibold">Transfer to our HBL account</h3>
+              <p className="mt-1 text-sm leading-6 text-[var(--muted)]">
+                Pay the exact order total using your bank app or a supported wallet. We will confirm your order after verifying the payment.
               </p>
+              <dl className="mt-4 divide-y divide-[var(--border)] rounded-[var(--radius-sm)] border border-[var(--border)] bg-white px-3 sm:px-4">
+                <div className="flex items-center justify-between gap-4 py-3 text-sm">
+                  <dt className="text-[var(--muted)]">Bank</dt><dd className="font-medium">{PAYMENT_ACCOUNT.bankName}</dd>
+                </div>
+                <div className="flex items-center justify-between gap-4 py-3 text-sm">
+                  <dt className="text-[var(--muted)]">Account title</dt><dd className="text-right font-medium">{PAYMENT_ACCOUNT.accountTitle}</dd>
+                </div>
+                <div className="flex items-center justify-between gap-4 py-3 text-sm">
+                  <dt className="text-[var(--muted)]">Account number</dt>
+                  <dd className="flex items-center gap-2 font-semibold tracking-wide">
+                    <span>{PAYMENT_ACCOUNT.accountNumber}</span>
+                    <button
+                      type="button"
+                      className="rounded p-1 text-[var(--brand-pink)] hover:bg-[var(--brand-blush)]"
+                      aria-label="Copy account number"
+                      onClick={async () => {
+                        try {
+                          await navigator.clipboard.writeText(PAYMENT_ACCOUNT.accountNumber);
+                          setAccountCopied(true);
+                          window.setTimeout(() => setAccountCopied(false), 1800);
+                        } catch {
+                          setError("Please select and copy the account number.");
+                        }
+                      }}
+                    >
+                      {accountCopied ? <Check size={16} aria-hidden="true" /> : <Copy size={16} aria-hidden="true" />}
+                    </button>
+                  </dd>
+                </div>
+                <div className="flex items-center justify-between gap-4 py-3 text-sm">
+                  <dt className="text-[var(--muted)]">Amount to transfer</dt><dd className="font-semibold text-[var(--brand-pink)]">{formatPrice(total)}</dd>
+                </div>
+              </dl>
+              <div className="mt-5">
+                <label className="mb-1.5 block text-sm font-medium" htmlFor="paymentProof">
+                  Payment screenshot <span aria-hidden="true" className="text-[var(--error)]">*</span>
+                </label>
+                <input
+                  id="paymentProof"
+                  name="paymentProof"
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  required
+                  className="block w-full rounded-[var(--radius-sm)] border border-[var(--border)] bg-white px-3 py-2 text-sm file:mr-3 file:rounded file:border-0 file:bg-[var(--brand-blush)] file:px-3 file:py-1.5 file:font-medium file:text-[var(--brand-pink)]"
+                />
+                <p className="mt-1.5 text-xs leading-5 text-[var(--muted)]">
+                  JPG, PNG, or WebP up to 5 MB. Show the transfer amount and reference. Never upload a PIN, password, or OTP.
+                </p>
+              </div>
             </div>
           </section>
 
@@ -451,7 +501,7 @@ function CheckoutForm() {
               </Button>
             ) : (
               <Button key="place-checkout-order" type="submit" size="lg" className="w-full sm:w-auto" disabled={loading || quoteLoading || !!quoteError || !quote}>
-                {loading ? "Placing order…" : "Place Order"}
+                {loading ? "Submitting payment…" : "Submit Payment & Place Order"}
               </Button>
             )}
           </div>

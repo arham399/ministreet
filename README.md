@@ -11,7 +11,7 @@ Built to the full AGENT.md production specification.
 ## Stack
 
 - **Next.js 15** (App Router) + TypeScript + Tailwind CSS 4
-- **Supabase PostgreSQL** + Prisma ORM
+- **Supabase PostgreSQL** + Drizzle ORM
 - **Auth.js (NextAuth v5)** — credentials, JWT, roles
 - **Zod** validation · **Zustand** cart/wishlist · **Recharts** analytics
 - **Gmail SMTP** order and newsletter emails · **Cloudinary** images · PDF invoices
@@ -26,11 +26,13 @@ cp .env.example .env
 # Set DATABASE_URL, DIRECT_URL, AUTH_SECRET, OWNER_EMAIL, OWNER_PASSWORD
 
 npm install
-npm run db:generate
-npm run db:migrate:deploy
-# Optional: seed development/sample data only after reviewing prisma/seed.ts
+# Existing Supabase database: record its baseline once
+npm run db:drizzle:migrate:mark-existing
+# For a new, empty database, use `npm run db:migrate` instead
 npm run dev
 ```
+
+Run `npm run db:seed` only when you intentionally want development sample data.
 
 | URL | Purpose |
 |-----|---------|
@@ -117,7 +119,8 @@ npm run typecheck
 npm run test
 ```
 
-The default Prisma commands use the Supabase PostgreSQL schema at
-`prisma/postgresql/schema.prisma`. Configure `DATABASE_URL` and `DIRECT_URL`
-before generating the client or running migrations. The root SQLite schema and
-migrations are retained only as a legacy local-data reference.
+The application and database scripts use Drizzle with the schema in
+`drizzle/migrations/schema.ts`. Configure `DATABASE_URL` and `DIRECT_URL`
+before generating migrations or connecting to Supabase. Existing Supabase
+tables and data are managed by Drizzle; local SQLite backups are archived and
+are not used by the application.

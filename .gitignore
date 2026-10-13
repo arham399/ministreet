@@ -38,9 +38,9 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# prisma
-prisma/*.db
-prisma/*.db-journal
+# Archived local SQLite data (not used by the application)
+/legacy-data/sqlite/*.db
+/legacy-data/sqlite/*.db-journal
 
-# Generated Prisma clients
+# Generated ORM clients
 /generated/

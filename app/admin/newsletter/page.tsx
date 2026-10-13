@@ -3,26 +3,36 @@ import { NewsletterCampaignForm } from "@/components/admin/newsletter-campaign-f
 import { NewsletterSubscriberStatus } from "@/components/admin/newsletter-subscriber-status";
 import { auth } from "@/lib/auth/config";
 import { can } from "@/lib/auth/permissions";
-import { desc } from "drizzle-orm";
+import { count, desc, eq, ilike } from "drizzle-orm";
 import { getDrizzleClient } from "@/lib/db/drizzle/client";
 import { newsletterSubscriber } from "@/lib/db/drizzle/schema";
+import { TablePagination } from "@/components/admin/table-pagination";
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
 
 export const metadata = { title: "Newsletter | Admin" };
+const PAGE_SIZE = 25;
 
-export default async function AdminNewsletterPage() {
+export default async function AdminNewsletterPage({ searchParams }: { searchParams: Promise<{ page?: string; q?: string }> }) {
+  const params = await searchParams;
+  const query = params.q?.trim().slice(0, 100) ?? "";
+  const parsedPage = Number.parseInt(params.page ?? "1", 10);
+  const page = Number.isFinite(parsedPage) && parsedPage > 0 ? parsedPage : 1;
+  const filter = query ? ilike(newsletterSubscriber.email, `%${query}%`) : undefined;
   const session = await auth();
   if (!session?.user || !can(session.user.role, "newsletter:manage")) {
     notFound();
   }
 
   const { db } = getDrizzleClient();
-  const subscribers = await db.select({
-    id: newsletterSubscriber.id,
-    email: newsletterSubscriber.email,
-    isActive: newsletterSubscriber.isActive,
-    createdAt: newsletterSubscriber.createdAt,
-  }).from(newsletterSubscriber).orderBy(desc(newsletterSubscriber.createdAt));
-  const activeCount = subscribers.filter((subscriber) => subscriber.isActive).length;
+  const [totalRows, activeRows, subscribers] = await Promise.all([
+    db.select({ value: count() }).from(newsletterSubscriber).where(filter),
+    db.select({ value: count() }).from(newsletterSubscriber).where(eq(newsletterSubscriber.isActive, true)),
+    db.select({ id: newsletterSubscriber.id, email: newsletterSubscriber.email, isActive: newsletterSubscriber.isActive, createdAt: newsletterSubscriber.createdAt })
+      .from(newsletterSubscriber).where(filter).orderBy(desc(newsletterSubscriber.createdAt)).limit(PAGE_SIZE).offset((page - 1) * PAGE_SIZE),
+  ]);
+  const total = totalRows[0]?.value ?? 0;
+  const activeCount = activeRows[0]?.value ?? 0;
 
   return (
     <div>
@@ -30,7 +40,7 @@ export default async function AdminNewsletterPage() {
         <div>
           <h1 className="text-xl font-semibold">Newsletter subscribers</h1>
           <p className="mt-1 text-sm text-[var(--muted)]">
-            {activeCount} active of {subscribers.length} total
+            {activeCount} active subscribers · {total} matching this search
           </p>
         </div>
       </div>
@@ -43,9 +53,14 @@ export default async function AdminNewsletterPage() {
         </div>
         <NewsletterCampaignForm activeCount={activeCount} />
       </section>
-      <h2 className="mb-3 text-sm font-semibold">Subscribers</h2>
+      <div className="admin-page-heading mb-3"><h2 className="text-sm font-semibold">Subscribers</h2></div>
+      <form action="/admin/newsletter" className="admin-search-form mb-4 flex max-w-lg gap-2">
+        <input name="q" defaultValue={query} placeholder="Search subscriber email" className="h-10 min-w-0 flex-1 rounded-xl border border-[var(--border)] bg-white px-3 text-sm" />
+        <Button type="submit" size="sm" variant="outline">Search</Button>
+        {query && <Button asChild size="sm" variant="ghost"><Link href="/admin/newsletter">Clear</Link></Button>}
+      </form>
       <div className="overflow-x-auto rounded-[var(--radius-md)] border border-[var(--border)] bg-white">
-        <table className="w-full text-sm">
+        <table className="admin-data-table w-full text-sm">
           <thead>
             <tr className="border-b border-[var(--border)] text-left text-[var(--muted)]">
               <th className="px-4 py-3">Email</th>
@@ -63,11 +78,11 @@ export default async function AdminNewsletterPage() {
             ) : (
               subscribers.map((subscriber) => (
                 <tr key={subscriber.id} className="border-b border-[var(--border)] last:border-0">
-                  <td className="px-4 py-3">{subscriber.email}</td>
-                  <td className="px-4 py-3 text-[var(--muted)]">
+                  <td data-label="Email" className="px-4 py-3">{subscriber.email}</td>
+                  <td data-label="Joined" className="px-4 py-3 text-[var(--muted)]">
                     {new Date(subscriber.createdAt).toLocaleDateString()}
                   </td>
-                  <td className="px-4 py-3">
+                  <td data-label="Status & action" className="px-4 py-3">
                     <NewsletterSubscriberStatus
                       id={subscriber.id}
                       isActive={subscriber.isActive}
@@ -78,6 +93,7 @@ export default async function AdminNewsletterPage() {
             )}
           </tbody>
         </table>
+        <TablePagination page={page} pageSize={PAGE_SIZE} total={total} basePath="/admin/newsletter" query={query} />
       </div>
     </div>
   );

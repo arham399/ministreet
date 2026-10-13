@@ -4,7 +4,7 @@ import { useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { MoreHorizontal, SlidersHorizontal, X } from "lucide-react";
 import Link from "next/link";
-import { CATEGORIES } from "@/lib/constants";
+import type { StoreCategory } from "@/lib/db/drizzle/queries/categories";
 import { PriceRangeControls } from "@/components/product/price-range-controls";
 
 type CategoryFilterDrawerProps = {
@@ -20,6 +20,7 @@ type CategoryFilterDrawerProps = {
   selectedCategory?: string;
   searchQuery?: string;
   showCategoryFilter?: boolean;
+  categories: StoreCategory[];
 };
 
 export function CategoryFilterDrawer({
@@ -35,6 +36,7 @@ export function CategoryFilterDrawer({
   selectedCategory,
   searchQuery,
   showCategoryFilter = false,
+  categories,
 }: CategoryFilterDrawerProps) {
   const [open, setOpen] = useState(false);
 
@@ -99,7 +101,7 @@ export function CategoryFilterDrawer({
                     className="h-11 w-full rounded-[var(--radius-sm)] border border-[var(--border)] bg-white px-3 text-sm focus:border-[var(--brand-pink)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-pink)]/20"
                   >
                     <option value="">All categories</option>
-                    {CATEGORIES.map((category) => (
+                    {categories.map((category) => (
                       <option key={category.slug} value={category.slug}>
                         {category.name}
                       </option>

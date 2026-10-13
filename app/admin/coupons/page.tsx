@@ -1,14 +1,21 @@
 import Link from "next/link";
-import { desc } from "drizzle-orm";
+import { count, desc, ilike } from "drizzle-orm";
 import { getDrizzleClient } from "@/lib/db/drizzle/client";
 import { coupon } from "@/lib/db/drizzle/schema";
 import { Button } from "@/components/ui/button";
 import { CouponActions } from "@/components/admin/coupon-actions";
 import { CouponStatus, type CouponStatusValue } from "@/components/admin/coupon-status";
+import { TablePagination } from "@/components/admin/table-pagination";
 
 export const metadata = { title: "Coupons | Admin" };
+const PAGE_SIZE = 25;
 
-export default async function AdminCouponsPage() {
+export default async function AdminCouponsPage({ searchParams }: { searchParams: Promise<{ page?: string; q?: string }> }) {
+  const params = await searchParams;
+  const query = params.q?.trim().slice(0, 100) ?? "";
+  const parsedPage = Number.parseInt(params.page ?? "1", 10);
+  const page = Number.isFinite(parsedPage) && parsedPage > 0 ? parsedPage : 1;
+  const filter = query ? ilike(coupon.code, `%${query}%`) : undefined;
   let coupons: {
     id: string;
     code: string;
@@ -23,21 +30,32 @@ export default async function AdminCouponsPage() {
     startsAt: Date | null;
     endsAt: Date | null;
   }[] = [];
+  let total = 0;
   try {
     const { db } = getDrizzleClient();
-    coupons = await db.select().from(coupon).orderBy(desc(coupon.createdAt));
+    const [totalRows, rows] = await Promise.all([
+      db.select({ value: count() }).from(coupon).where(filter),
+      db.select().from(coupon).where(filter).orderBy(desc(coupon.createdAt)).limit(PAGE_SIZE).offset((page - 1) * PAGE_SIZE),
+    ]);
+    total = totalRows[0]?.value ?? 0;
+    coupons = rows;
   } catch { /* */ }
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-xl font-semibold">Coupons</h1>
+      <div className="admin-page-heading mb-6">
+        <div><p className="admin-eyebrow">Promotions</p><h1 className="text-xl font-semibold">Coupons</h1></div>
         <Button asChild size="sm">
           <Link href="/admin/coupons/new">+ Add coupon</Link>
         </Button>
       </div>
+      <form action="/admin/coupons" className="admin-search-form mb-4 flex max-w-lg gap-2">
+        <input name="q" defaultValue={query} placeholder="Search coupon code" className="h-10 min-w-0 flex-1 rounded-xl border border-[var(--border)] bg-white px-3 text-sm" />
+        <Button type="submit" size="sm" variant="outline">Search</Button>
+        {query && <Button asChild size="sm" variant="ghost"><Link href="/admin/coupons">Clear</Link></Button>}
+      </form>
       <div className="rounded-[var(--radius-md)] border border-[var(--border)] bg-white overflow-x-auto shadow-soft">
-        <table className="w-full text-sm">
+        <table className="admin-data-table w-full text-sm">
           <thead>
             <tr className="border-b border-[var(--border)] text-left text-[var(--muted)]">
               <th className="px-4 py-3">Code</th>
@@ -60,17 +78,17 @@ export default async function AdminCouponsPage() {
             ) : (
               coupons.map((c) => (
                 <tr key={c.id} className="border-b border-[var(--border)] last:border-0">
-                  <td className="px-4 py-3 font-mono font-bold tracking-wide text-[var(--brand-pink)]">{c.code}</td>
-                  <td className="px-4 py-3">{c.type}</td>
-                  <td className="px-4 py-3">
+                  <td data-label="Code" className="px-4 py-3 font-mono font-bold tracking-wide text-[var(--brand-pink)]">{c.code}</td>
+                  <td data-label="Type" className="px-4 py-3">{c.type}</td>
+                  <td data-label="Value" className="px-4 py-3">
                     {c.type === "PERCENTAGE"
                       ? `${formatCouponValue(c.value)}%`
                       : `Rs. ${formatCouponValue(c.value)}`}
                   </td>
-                  <td className="px-4 py-3">
+                  <td data-label="Usage" className="px-4 py-3">
                     {c.usageCount}{c.usageLimit != null ? ` / ${c.usageLimit}` : ""}
                   </td>
-                  <td className="px-4 py-3 text-xs text-[var(--muted)]">
+                  <td data-label="Restrictions" className="px-4 py-3 text-xs text-[var(--muted)]">
                     {[
                       c.perCustomerLimit != null ? `${c.perCustomerLimit} per customer` : null,
                       Array.isArray(c.eligibleProductIds) && c.eligibleProductIds.length
@@ -81,7 +99,7 @@ export default async function AdminCouponsPage() {
                         : null,
                     ].filter(Boolean).join(" · ") || "All products"}
                   </td>
-                  <td className="px-4 py-3">
+                  <td data-label="Status" className="px-4 py-3">
                     <CouponStatus
                       isActive={c.isActive}
                       startsAt={c.startsAt?.toISOString() ?? null}
@@ -91,10 +109,10 @@ export default async function AdminCouponsPage() {
                       initialStatus={getCouponStatus(c)}
                     />
                   </td>
-                  <td className="px-4 py-3 text-[var(--muted)]">
+                  <td data-label="Expires" className="px-4 py-3 text-[var(--muted)]">
                     {c.endsAt ? new Date(c.endsAt).toLocaleDateString() : "—"}
                   </td>
-                  <td className="px-4 py-3">
+                  <td data-label="Actions" className="px-4 py-3">
                     <CouponActions id={c.id} code={c.code} isActive={c.isActive} />
                   </td>
                 </tr>
@@ -102,6 +120,7 @@ export default async function AdminCouponsPage() {
             )}
           </tbody>
         </table>
+        <TablePagination page={page} pageSize={PAGE_SIZE} total={total} basePath="/admin/coupons" query={query} />
       </div>
     </div>
   );

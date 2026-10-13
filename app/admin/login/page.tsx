@@ -5,6 +5,7 @@ import { signIn } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import Image from "next/image";
 
 export default function AdminLoginPage() {
   const router = useRouter();
@@ -32,12 +33,19 @@ export default function AdminLoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[var(--brand-cream)] px-4">
-      <div className="w-full max-w-sm rounded-[var(--radius-lg)] border border-[var(--border)] bg-white p-8 shadow-soft-md">
-        <h1 className="font-display text-2xl font-semibold text-center mb-1 text-[var(--brand-pink)]">
-          Mini Street
-        </h1>
-        <p className="text-center text-sm text-[var(--muted)] mb-6">Admin sign in</p>
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#f9f2f6] px-4 py-10">
+      <div aria-hidden="true" className="pointer-events-none absolute -left-28 -top-28 h-80 w-80 rounded-full bg-[#f8dceb]/70 blur-3xl" />
+      <div aria-hidden="true" className="pointer-events-none absolute -bottom-32 -right-24 h-96 w-96 rounded-full bg-[#eadcf0]/60 blur-3xl" />
+      <div className="relative w-full max-w-[420px] overflow-hidden rounded-[28px] border border-white/80 bg-white/95 p-7 shadow-[0_24px_80px_rgba(79,35,61,.12)] sm:p-10">
+        <div className="mb-7 flex flex-col items-center text-center">
+          <Image src="/brand/logo.png" alt="Mini Street" width={76} height={76} className="mb-3 h-[68px] w-[68px] rounded-full object-contain" priority />
+          <h1 className="font-display text-3xl font-semibold text-[#c2186b]">Mini Street</h1>
+          <p className="mt-1 text-[10px] font-semibold uppercase tracking-[.24em] text-[#a78a9b]">Store administration</p>
+        </div>
+        <div className="mb-6 border-t border-[#f1e6ec] pt-5 text-center">
+          <h2 className="text-lg font-semibold text-[#2b232a]">Welcome back</h2>
+          <p className="mt-1 text-sm text-[var(--muted)]">Sign in to manage your store</p>
+        </div>
         {params.get("credentialsUpdated") === "1" && (
           <p role="status" className="mb-4 text-sm text-green-700">
             Sign-in details updated. Please sign in with your new credentials.

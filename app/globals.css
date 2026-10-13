@@ -82,6 +82,74 @@ body {
   letter-spacing: -0.01em;
 }
 
+/* Keep admin copy and confirmation dialogs inside their containers at every viewport size. */
+.admin-main :where(h1, h2, h3, p, td, th, [role="alert"], [role="status"]) {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+
+/* Keep admin data tables readable on phones: scroll the table inside its card
+   instead of forcing columns to collapse into one character per line. */
+.admin-main :where(table) {
+  min-width: 42rem;
+}
+.admin-main :where(th, td) {
+  overflow-wrap: normal;
+  word-break: normal;
+}
+.admin-main :where(th, td):not(:last-child) {
+  white-space: nowrap;
+}
+.admin-main :where(td:first-child) {
+  white-space: normal;
+  min-width: 10rem;
+}
+.admin-main :where(form[role="search"], form[action^="/admin/"]) {
+  min-width: 0;
+}
+.admin-page-heading {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: .75rem;
+}
+.admin-page-heading > * { min-width: 0; }
+.admin-eyebrow {
+  margin-bottom: .25rem;
+  color: #a17d91;
+  font-size: .62rem;
+  font-weight: 700;
+  letter-spacing: .18em;
+  line-height: 1.35;
+  text-transform: uppercase;
+}
+.admin-sidebar-nav::-webkit-scrollbar { width: 5px; }
+.admin-sidebar-nav::-webkit-scrollbar-thumb { border-radius: 999px; background: rgba(255,255,255,.18); }
+.admin-sidebar-nav { scrollbar-color: rgba(255,255,255,.18) transparent; scrollbar-width: thin; }
+
+.admin-dialog {
+  box-sizing: border-box;
+  width: min(32rem, calc(100vw - 2rem));
+  min-width: 0;
+  max-width: calc(100vw - 2rem);
+  max-height: calc(100dvh - 2rem);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.admin-dialog :where(h1, h2, h3, p, span, [role="alert"], [role="status"]) {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: normal;
+  white-space: normal;
+}
+
 :focus-visible {
   outline: 2px solid var(--brand-pink);
   outline-offset: 2px;
@@ -478,6 +546,23 @@ body {
 .social-question > span { width: 36px; height: 1px; background: rgba(130,92,84,.3); }
 
 @media (max-width: 639px) {
+  .admin-page-heading { align-items: stretch; }
+  .admin-page-heading > :is(a, button, [data-slot="button"]) { width: 100%; }
+  .admin-page-heading > div:has(> a), .admin-page-heading > div:has(> button) { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .admin-page-heading > div:has(> a) > *, .admin-page-heading > div:has(> button) > * { min-width: 0; }
+  .admin-main { padding-inline: .75rem; }
+  .admin-main :where(input, select, textarea) { max-width: 100%; }
+  .admin-main :where(.admin-page-actions) { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .admin-main :where(.admin-page-actions > *) { min-width: 0; }
+  .admin-main :where(.admin-form-grid) { grid-template-columns: minmax(0, 1fr); }
+  .admin-main :where(.admin-card-row) { align-items: flex-start; flex-direction: column; }
+  .admin-main :where(.admin-stat-grid) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .admin-main :where(.admin-chart-card) { min-width: 0; padding: 1rem; }
+  .admin-main :where(.recharts-responsive-container) { min-width: 0; }
+  .admin-main :where(.admin-search-form) { display: grid; grid-template-columns: minmax(0, 1fr) auto; }
+  .admin-main :where(.admin-search-form input) { width: 100%; }
+  .admin-main :where(.admin-search-form > a) { grid-column: 1 / -1; justify-self: start; }
+  .admin-main :where(.admin-table-scroll) { max-width: 100%; overscroll-behavior-inline: contain; }
   .social-showcase {
     background-image: url("/assets/categories/homepage/social_media/mobile/image.png");
     background-position: center;
@@ -485,6 +570,92 @@ body {
   }
   .social-showcase-wash { background: rgba(255,250,246,.58); }
   .social-contact-link:nth-child(2)::after { display: none; }
+}
+
+/* On narrow admin screens, render data rows as compact, labeled records.
+   Desktop keeps its full table; mobile no longer has to scroll a 700px grid. */
+@media (max-width: 767px) {
+  .admin-main :where(table.admin-data-table) {
+    width: 100%;
+    min-width: 0 !important;
+    border-collapse: separate;
+    border-spacing: 0 .65rem;
+  }
+  .admin-main :where(table.admin-data-table thead) { display: none; }
+  .admin-main :where(table.admin-data-table tbody) { display: block; width: 100%; }
+  .admin-main :where(table.admin-data-table tbody tr) {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+    margin: 0 0 .7rem;
+    overflow: hidden;
+    border: 1px solid #eee4ea;
+    border-radius: 15px;
+    background: #fff;
+    box-shadow: 0 5px 18px rgba(72,40,59,.045);
+  }
+  .admin-main :where(table.admin-data-table tbody tr:last-child) { margin-bottom: .15rem; }
+  .admin-main :where(table.admin-data-table td[data-label]) {
+    display: flex;
+    width: 100%;
+    min-width: 0;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: flex-start;
+    gap: .25rem;
+    padding: .68rem .8rem;
+    border: 0;
+    border-bottom: 1px solid #f3edf0;
+    text-align: left;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    font-size: .82rem;
+    line-height: 1.35;
+  }
+  .admin-main :where(table.admin-data-table td[data-label]::before) {
+    content: attr(data-label);
+    flex: none;
+    color: #8a7b85;
+    font-size: .61rem;
+    font-weight: 700;
+    letter-spacing: .055em;
+    line-height: 1.45;
+    text-align: left;
+    text-transform: uppercase;
+    overflow-wrap: normal;
+  }
+  .admin-main :where(table.admin-data-table td[data-label]:last-child) { border-bottom: 0; }
+  .admin-main :where(table.admin-data-table td[colspan]) {
+    display: block;
+    grid-column: 1 / -1;
+    min-width: 0;
+    padding: 1rem;
+    text-align: center;
+    white-space: normal;
+  }
+  .admin-main :where(table.admin-data-table td[colspan]::before) { display: none; }
+  .admin-main :where(table.admin-data-table td[data-label="Actions"]) { grid-column: 1 / -1; display: block; text-align: left; }
+  .admin-main :where(table.admin-data-table td[data-label="Actions"]::before) { display: block; margin-bottom: .5rem; }
+  .admin-main :where(table.admin-products-table td[data-label="Product"]) { grid-column: 1 / -1; }
+  .admin-main :where(table.admin-data-table td[data-label="Actions"] button) { width: 100%; min-height: 2.5rem; }
+  .admin-main :where(table.admin-data-table .admin-row-actions) { align-items: stretch; flex-direction: column; gap: .45rem; }
+  .admin-main :where(table.admin-data-table .admin-row-actions > a) {
+    display: inline-flex;
+    min-height: 2.5rem;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid #eee4ea;
+    border-radius: 9px;
+    padding: .55rem .75rem;
+    text-decoration: none;
+  }
+  .admin-main :where(table.admin-data-table td[data-label="Actions"] > div) { min-width: 0; width: 100%; flex-direction: column; align-items: stretch; }
+  .admin-main :where(table.admin-data-table td[data-label="Actions"] > div > a) { display: inline-flex; min-height: 2.5rem; align-items: center; justify-content: center; border: 1px solid #eee4ea; border-radius: 9px; }
+  .admin-main :where(table.admin-data-table td[data-label="Actions"] .min-w-max) { min-width: 0; }
+  .admin-main :where(table.admin-data-table td[data-label="Actions"] a + a) { margin-left: 0; }
+  .admin-main :where(.admin-product-toolbar) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .admin-main :where(.admin-product-toolbar > :first-child) { grid-column: 1 / -1; }
+  .admin-main :where(.admin-search-form) { grid-template-columns: minmax(0, 1fr) auto; }
 }
 
 @media (max-width: 639px) {

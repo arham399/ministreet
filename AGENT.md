@@ -127,7 +127,7 @@ Use Next.js for the backend as requested:
 Preferred:
 
 - PostgreSQL
-- Prisma ORM
+- Drizzle ORM with Supabase PostgreSQL
 
 Design the database for production scalability.
 
@@ -1623,7 +1623,7 @@ Implement:
 - Secure cookies
 - CSRF protection where applicable
 - Input sanitization
-- SQL injection prevention via Prisma
+- SQL injection prevention through parameterized Drizzle queries
 - Safe file uploads
 - Image validation
 - Maximum upload size
@@ -2099,7 +2099,7 @@ The first owner account should be created securely through setup or environment-
 
 # 63. DATABASE MIGRATIONS
 
-Use proper Prisma migrations.
+Use Drizzle migrations.
 
 Never rely on `db push` as the only production migration process.
 
@@ -2309,7 +2309,7 @@ Build in this order:
 - Establish design tokens
 - Install dependencies
 - Configure database
-- Configure Prisma
+- Configure Drizzle
 - Create schema
 - Create migrations
 
@@ -3562,7 +3562,7 @@ mini-street/
 │   │   └── session.ts
 │   │
 │   ├── db/
-│   │   ├── prisma.ts
+│   │   ├── drizzle/
 │   │   └── queries/
 │   │
 │   ├── email/
@@ -3598,9 +3598,7 @@ mini-street/
 │   ├── utils.ts
 │   └── constants.ts
 │
-├── prisma/
-│   ├── schema.prisma
-│   ├── seed.ts
+├── drizzle/
 │   └── migrations/
 │
 ├── emails/

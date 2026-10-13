@@ -106,6 +106,11 @@ export default async function TrackingDetailPage({ params }: Props) {
     currentStatus as (typeof STATUS_ORDER)[number]
   );
   const isTerminal = ["CANCELLED", "RETURNED", "REFUNDED"].includes(currentStatus);
+  const paymentLabel = order.paymentStatus === "PAID"
+    ? { title: "Payment verified", description: "Your bank transfer has been verified. Your order can now be prepared.", icon: BadgeCheck }
+    : order.paymentStatus === "FAILED"
+      ? { title: "Payment not verified · Order cancelled", description: "We could not verify the submitted proof and cancelled this order. Contact support if you believe this is an error.", icon: X }
+      : { title: "Payment verification in progress", description: "We received your payment screenshot. We’ll update you after reviewing the transfer.", icon: WalletCards };
   const timelineSteps: TrackingStep[] = isTerminal
     ? order.trackingEvents.map((event) => ({
         status: event.status,
@@ -131,6 +136,21 @@ export default async function TrackingDetailPage({ params }: Props) {
         Tracking ID: <span className="font-medium text-[var(--charcoal)]">{order.trackingId}</span>
       </p>
 
+      {order.paymentMethod === "BANK_TRANSFER" && (
+        <div className="mb-8 rounded-[var(--radius-lg)] border border-[var(--border)] bg-white p-5">
+          <div className="flex items-start gap-3">
+            <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-[var(--brand-blush)] text-[var(--brand-pink)]">
+              <paymentLabel.icon size={19} aria-hidden="true" />
+            </span>
+            <div>
+              <h2 className="font-semibold">{paymentLabel.title}</h2>
+              <p className="mt-1 text-sm text-[var(--muted)]">{paymentLabel.description}</p>
+              <p className="mt-2 text-sm"><span className="text-[var(--muted)]">Payment status: </span><span className="font-medium">{order.paymentStatus === "PAID" ? "Verified" : order.paymentStatus === "FAILED" ? "Not verified" : "Under review"}</span></p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Timeline */}
       <div className="relative mb-12">
         {timelineSteps.map((step, idx) => {
@@ -143,8 +163,8 @@ export default async function TrackingDetailPage({ params }: Props) {
           const active = !isTerminal && status === currentStatus;
 
           return (
-            <div key={status + idx} className="flex gap-4 pb-8 last:pb-0">
-              <div className="flex w-10 shrink-0 flex-col items-center">
+            <div key={status + idx} className="flex gap-4">
+              <div className="relative flex w-10 shrink-0 justify-center">
                 <div
                   className={cn(
                     "relative z-10 flex size-10 shrink-0 items-center justify-center rounded-full border transition-colors",
@@ -160,13 +180,14 @@ export default async function TrackingDetailPage({ params }: Props) {
                 {idx < timelineSteps.length - 1 && (
                   <div
                     className={cn(
-                      "my-1 w-0.5 flex-1 rounded-full",
+                      "absolute left-1/2 top-10 bottom-0 w-0.5 -translate-x-1/2",
                       isConnectorComplete ? "bg-[var(--brand-pink)]" : "bg-[var(--border)]"
                     )}
+                    aria-hidden="true"
                   />
                 )}
               </div>
-              <div className="min-w-0 flex-1 pt-1.5">
+              <div className="min-w-0 flex-1 pb-8 pt-1.5 last:pb-0">
                 <p className={cn("font-medium text-sm", active && "text-[var(--brand-pink)]")}>
                   {step.title}
                 </p>

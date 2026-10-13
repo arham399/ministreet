@@ -28,7 +28,7 @@ export type CreateOrderResult =
   | { success: true; orderId: string; orderNumber: string; trackingId: string; total: number }
   | { success: false; error: string };
 
-export async function createOrder(input: CheckoutInput): Promise<CreateOrderResult> {
+export async function createOrder(input: CheckoutInput, paymentProofPath: string): Promise<CreateOrderResult> {
   try {
     const { db } = getDrizzleClient();
     const productIds = input.items.map((i) => i.productId);
@@ -227,8 +227,9 @@ export async function createOrder(input: CheckoutInput): Promise<CreateOrderResu
           discountAmount: String(totals.discountAmount),
           shippingAmount: String(totals.shippingAmount),
           total: String(totals.total),
-          paymentMethod: input.paymentMethod || "COD",
+          paymentMethod: "BANK_TRANSFER",
           paymentStatus: "PENDING",
+          paymentProofPath,
           status: "PLACED",
           couponCode,
           couponCampaignId,
@@ -309,7 +310,7 @@ export async function createOrder(input: CheckoutInput): Promise<CreateOrderResu
         totals.discountAmount > 0 ? formatRupees(totals.discountAmount) : null;
       const customerEmail = sendEmail({
         to: input.customerEmail,
-        subject: `Your Mini Street order ${createdOrder.orderNumber} is confirmed`,
+        subject: `Payment received for review — Mini Street order ${createdOrder.orderNumber}`,
         html: orderReceivedEmailHtml({
           customerName: input.customerName,
           orderNumber: createdOrder.orderNumber,
@@ -355,6 +356,7 @@ export async function createOrder(input: CheckoutInput): Promise<CreateOrderResu
               ]
                 .filter(Boolean)
                 .join(", "),
+              orderAdminUrl: `${appUrl}/admin/orders/${createdOrder.id}`,
             }),
             template: "new-order-notification",
             orderId: createdOrder.id,

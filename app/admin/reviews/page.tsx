@@ -1,11 +1,18 @@
-import { desc, eq } from "drizzle-orm";
+import { count, desc, eq } from "drizzle-orm";
 import { getDrizzleClient } from "@/lib/db/drizzle/client";
 import { product, review } from "@/lib/db/drizzle/schema";
 import { ReviewActions } from "@/components/admin/review-actions";
+import { TablePagination } from "@/components/admin/table-pagination";
 
 export const metadata = { title: "Reviews | Admin" };
 
-export default async function AdminReviewsPage() {
+const PAGE_SIZE = 25;
+
+export default async function AdminReviewsPage({ searchParams }: { searchParams: Promise<{ page?: string }> }) {
+  const params = await searchParams;
+  const parsedPage = Number.parseInt(params.page ?? "1", 10);
+  const page = Number.isFinite(parsedPage) && parsedPage > 0 ? parsedPage : 1;
+  let total = 0;
   let reviews: {
     id: string;
     authorName: string;
@@ -17,7 +24,9 @@ export default async function AdminReviewsPage() {
   }[] = [];
   try {
     const { db } = getDrizzleClient();
-    reviews = await db.select({
+    const [totalRows, rows] = await Promise.all([
+      db.select({ value: count() }).from(review),
+      db.select({
       id: review.id,
       authorName: review.authorName,
       rating: review.rating,
@@ -25,8 +34,11 @@ export default async function AdminReviewsPage() {
       body: review.body,
       status: review.status,
       product: { name: product.name },
-    }).from(review).leftJoin(product, eq(review.productId, product.id))
-      .orderBy(desc(review.createdAt)).limit(50);
+      }).from(review).leftJoin(product, eq(review.productId, product.id))
+        .orderBy(desc(review.createdAt)).limit(PAGE_SIZE).offset((page - 1) * PAGE_SIZE),
+    ]);
+    total = totalRows[0]?.value ?? 0;
+    reviews = rows;
   } catch { /* */ }
 
   return (
@@ -52,6 +64,9 @@ export default async function AdminReviewsPage() {
           ))}
         </ul>
       )}
+      <div className="mt-4 rounded-[var(--radius-md)] border border-[var(--border)] bg-white">
+        <TablePagination page={page} pageSize={PAGE_SIZE} total={total} basePath="/admin/reviews" />
+      </div>
     </div>
   );
 }

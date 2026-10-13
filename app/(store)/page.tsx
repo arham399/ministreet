@@ -7,10 +7,12 @@ import { CategoryCarousel } from "@/components/home/category-carousel";
 import { PromoBannerCarousel } from "@/components/home/promo-banner-carousel";
 import { getNewArrivals, getBestSellers } from "@/lib/db/queries/products";
 import { CONTACT_EMAIL, CONTACT_PHONE, CONTACT_PHONE_LINK, FACEBOOK_URL, INSTAGRAM_URL } from "@/lib/constants";
+import { getStoreCategories } from "@/lib/db/drizzle/queries/categories";
 
 export default async function HomePage() {
   let newArrivals: Awaited<ReturnType<typeof getNewArrivals>>["products"] = [];
   let bestSellers: Awaited<ReturnType<typeof getBestSellers>>["products"] = [];
+  const categories = await getStoreCategories();
 
   try {
     const [na, bs] = await Promise.all([getNewArrivals(4), getBestSellers(4)]);
@@ -45,7 +47,7 @@ export default async function HomePage() {
             Shop by category
             <span className="h-0.5 flex-1 bg-[var(--brand-pink-soft)]" aria-hidden="true" />
           </h2>
-          <CategoryCarousel />
+          <CategoryCarousel categories={categories} />
         </div>
       </section>
 

@@ -42,6 +42,17 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
       { status: 400 }
     );
   }
+  if (
+    currentOrder.paymentMethod === "BANK_TRANSFER" &&
+    currentOrder.paymentStatus !== "PAID" &&
+    newStatus !== currentOrder.status &&
+    newStatus !== "CANCELLED"
+  ) {
+    return NextResponse.json(
+      { error: "Verify the payment before confirming or fulfilling this order." },
+      { status: 409 },
+    );
+  }
 
   const statusChanged = newStatus !== currentOrder.status;
   const copy = TRACKING_STATUS_COPY[newStatus];

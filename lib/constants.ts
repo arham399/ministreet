@@ -7,6 +7,11 @@ export const CONTACT_EMAIL = "ministreet.support@gmail.com";
 export const CONTACT_PHONE = "+92 336 5965896";
 export const CONTACT_PHONE_LINK = "tel:+923365965896";
 export const FACEBOOK_URL = "https://www.facebook.com/profile.php?id=61559864167910";
+export const PAYMENT_ACCOUNT = {
+  bankName: "HBL",
+  accountTitle: "SYEDA AROOJ",
+  accountNumber: "25807000188699",
+} as const;
 
 export const CATEGORIES = [
   { name: "Earrings", slug: "earrings" },

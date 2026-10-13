@@ -265,7 +265,7 @@ export default function CouponCreateForm({ products, categories }: CouponCreateF
       <AlertDialog.Root open={isReuseDialogOpen} onOpenChange={setIsReuseDialogOpen}>
         <AlertDialog.Portal>
           <AlertDialog.Overlay className="fixed inset-0 z-[100] bg-black/45 backdrop-blur-[1px]" />
-          <AlertDialog.Content className="fixed left-1/2 top-1/2 z-[101] w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-[var(--radius-lg)] border border-[var(--border)] bg-white p-6 shadow-2xl focus:outline-none">
+          <AlertDialog.Content className="admin-dialog fixed left-1/2 top-1/2 z-[101] -translate-x-1/2 -translate-y-1/2 rounded-[var(--radius-lg)] border border-[var(--border)] bg-white p-5 shadow-2xl focus:outline-none sm:p-6">
             <AlertDialog.Title className="font-display text-xl font-semibold text-[var(--charcoal)]">
               Reuse coupon code?
             </AlertDialog.Title>

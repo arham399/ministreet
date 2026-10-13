@@ -18,7 +18,13 @@ const quoteSchema = z.object({
 
 export async function POST(request: NextRequest) {
   try {
-    const parsed = quoteSchema.safeParse(await request.json());
+    let body: unknown;
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json({ error: "Cart items are required to calculate discounts." }, { status: 400 });
+    }
+    const parsed = quoteSchema.safeParse(body);
     if (!parsed.success) {
       return NextResponse.json({ error: "Invalid cart items." }, { status: 400 });
     }

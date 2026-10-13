@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { CATEGORIES } from "@/lib/constants";
+import type { StoreCategory } from "@/lib/db/drizzle/queries/categories";
 
 const categoryImages: Record<string, string> = {
   earrings: "/assets/categories/earrings.png",
@@ -16,7 +16,7 @@ const categoryImages: Record<string, string> = {
   "combo-sets": "/assets/categories/combo-sets.png",
 };
 
-export function CategoryCarousel() {
+export function CategoryCarousel({ categories }: { categories: StoreCategory[] }) {
   const scroller = useRef<HTMLDivElement>(null);
   const [progress, setProgress] = useState(0);
   const [hasOverflow, setHasOverflow] = useState(false);
@@ -46,7 +46,7 @@ export function CategoryCarousel() {
         className="category-scroll flex w-full snap-x snap-mandatory justify-start gap-1 overflow-x-auto pt-2 pb-2 sm:gap-2 sm:pb-0 lg:justify-center lg:gap-5"
         aria-label="Browse product categories"
       >
-        {CATEGORIES.map((category) => (
+        {categories.map((category) => (
           <Link
             key={category.slug}
             href={`/shop/${category.slug}`}
@@ -54,7 +54,7 @@ export function CategoryCarousel() {
             className="category-link group flex w-16 shrink-0 snap-start items-center justify-center sm:w-[72px] lg:w-[88px]"
           >
             <Image
-              src={categoryImages[category.slug]}
+              src={categoryImages[category.slug] || "/assets/categories/earrings.png"}
               alt=""
               width={88}
               height={88}

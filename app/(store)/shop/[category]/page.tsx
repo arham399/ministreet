@@ -3,7 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { CategoryFilterDrawer } from "@/components/product/category-filter-drawer";
 import { CategorySortForm } from "@/components/product/category-sort-form";
 import { ProductCard, type ProductCardData } from "@/components/product/product-card";
-import { CATEGORIES } from "@/lib/constants";
+import { getStoreCategories } from "@/lib/db/drizzle/queries/categories";
 import { getProductPriceCeiling, getProducts } from "@/lib/db/queries/products";
 
 type Props = {
@@ -13,7 +13,8 @@ type Props = {
 
 export async function generateMetadata({ params }: Props) {
   const { category } = await params;
-  const cat = CATEGORIES.find((c) => c.slug === category);
+  const categories = await getStoreCategories();
+  const cat = categories.find((c) => c.slug === category);
   return { title: cat?.name || "Category" };
 }
 
@@ -44,7 +45,8 @@ function queryHref(category: string, values: Record<string, string | undefined>)
 
 export default async function CategoryPage({ params, searchParams }: Props) {
   const { category } = await params;
-  const cat = CATEGORIES.find((c) => c.slug === category);
+  const categories = await getStoreCategories();
+  const cat = categories.find((c) => c.slug === category);
   if (!cat) notFound();
 
   const sp = await searchParams;
@@ -193,6 +195,7 @@ export default async function CategoryPage({ params, searchParams }: Props) {
               onSale={onSale}
               activeFilterCount={activeFilterCount}
               clearHref={clearHref}
+              categories={categories}
             />
           </div>
       </div>

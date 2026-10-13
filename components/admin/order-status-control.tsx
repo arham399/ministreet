@@ -14,6 +14,8 @@ type Props = {
   currentStatus: OrderStatus;
   courierName?: string | null;
   courierTracking?: string | null;
+  paymentMethod?: string;
+  paymentStatus?: string;
 };
 
 export function OrderStatusControl({
@@ -21,6 +23,8 @@ export function OrderStatusControl({
   currentStatus,
   courierName: initialCourier,
   courierTracking: initialTracking,
+  paymentMethod,
+  paymentStatus,
 }: Props) {
   const router = useRouter();
   const [status, setStatus] = useState(currentStatus);
@@ -30,7 +34,10 @@ export function OrderStatusControl({
   const [error, setError] = useState<string | null>(null);
   const [saveMessage, setSaveMessage] = useState("");
   const [deliveryEmailFailed, setDeliveryEmailFailed] = useState(false);
-  const options = ORDER_STATUS_TRANSITIONS[currentStatus];
+  const canConfirmPrepaid = paymentMethod !== "COD" && paymentStatus !== "PAID";
+  const options = ORDER_STATUS_TRANSITIONS[currentStatus].filter(
+    (nextStatus) => !(canConfirmPrepaid && nextStatus !== "CANCELLED"),
+  );
 
   useEffect(() => {
     setStatus(currentStatus);
@@ -104,7 +111,9 @@ export function OrderStatusControl({
             ))}
           </select>
           <p className="text-xs leading-5 text-[var(--muted)]">
-            Update one step at a time. After saving this stage, the next fulfillment status will become available.
+            {canConfirmPrepaid
+              ? "Verify the bank transfer in the Payment section before confirming this order."
+              : "Update one step at a time. After saving this stage, the next fulfillment status will become available."}
           </p>
         </>
       )}

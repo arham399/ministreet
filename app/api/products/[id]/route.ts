@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { asc, eq } from "drizzle-orm";
 import { getDrizzleClient } from "@/lib/db/drizzle/client";
 import { auditLog, category, product, productImage, productTag } from "@/lib/db/drizzle/schema";
-import { auth, isAdminRole } from "@/lib/auth/config";
+import { auth } from "@/lib/auth/config";
+import { can } from "@/lib/auth/permissions";
 import { productSchema } from "@/lib/validation/product";
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -25,7 +26,7 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
 
 export async function PATCH(req: NextRequest, ctx: Ctx) {
   const session = await auth();
-  if (!session?.user || !isAdminRole(session.user.role)) {
+  if (!session?.user || !can(session.user.role, "products:write")) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const { id } = await ctx.params;
@@ -51,6 +52,7 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
     if (data.trackInventory != null) update.trackInventory = data.trackInventory;
     if (data.allowBackorder != null) update.allowBackorder = data.allowBackorder;
     if (data.isActive != null) update.isActive = data.isActive;
+    if (data.isActive === true) update.archivedAt = null;
     if (data.isNewArrival != null) update.isNewArrival = data.isNewArrival;
     if (data.isFeatured != null) update.isFeatured = data.isFeatured;
     if (data.badge !== undefined) update.badge = data.badge;
@@ -94,7 +96,7 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
 
 export async function DELETE(_req: NextRequest, ctx: Ctx) {
   const session = await auth();
-  if (!session?.user || !isAdminRole(session.user.role)) {
+  if (!session?.user || !can(session.user.role, "products:write")) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const { id } = await ctx.params;

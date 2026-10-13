@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useState, useEffect } from "react";
 import { Search, Heart, ShoppingBag, Menu, X } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { CATEGORIES } from "@/lib/constants";
+import type { StoreCategory } from "@/lib/db/drizzle/queries/categories";
 import { useCartStore } from "@/lib/cart/store";
 import { useWishlistStore } from "@/lib/cart/wishlist-store";
 
@@ -15,7 +15,7 @@ const NAV = [
   { label: "Offers", href: "/offers" },
 ];
 
-export function SiteHeader() {
+export function SiteHeader({ categories }: { categories: StoreCategory[] }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [scrolled, setScrolled] = useState(false);
@@ -76,7 +76,7 @@ export function SiteHeader() {
                 Categories
               </button>
               <div className="absolute top-full left-1/2 -translate-x-1/2 mt-3 w-52 bg-white rounded-[var(--radius-lg)] shadow-soft-lg border border-[var(--border)] opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-250 py-2 z-50">
-                {CATEGORIES.map((cat) => (
+                {categories.map((cat) => (
                   <Link
                     key={cat.slug}
                     href={`/shop/${cat.slug}`}
@@ -144,7 +144,7 @@ export function SiteHeader() {
             <p className="pt-4 pb-2 text-[10px] font-semibold uppercase tracking-[0.15em] text-[var(--muted)]">
               Categories
             </p>
-            {CATEGORIES.map((cat) => (
+            {categories.map((cat) => (
               <Link
                 key={cat.slug}
                 href={`/shop/${cat.slug}`}

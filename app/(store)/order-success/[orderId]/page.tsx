@@ -35,9 +35,9 @@ export default async function OrderSuccessPage({ params }: Props) {
       <div className="mx-auto max-w-lg px-4 py-20 text-center">
         <div className="text-5xl mb-4">💗</div>
         <h1 className="font-display text-3xl font-semibold mb-2">
-          Order Placed Successfully
+          Order received — payment under review
         </h1>
-        <p className="text-[var(--muted)] mb-2">Thank you for shopping with Mini Street</p>
+        <p className="text-[var(--muted)] mb-2">We received your order and payment screenshot. We’ll confirm your order after verifying the transfer.</p>
         <p className="text-sm text-[var(--charcoal)] mb-8">
           Order reference: <strong>{orderId}</strong>
         </p>
@@ -59,9 +59,9 @@ export default async function OrderSuccessPage({ params }: Props) {
     <div className="mx-auto max-w-lg px-4 py-20 text-center">
       <div className="text-5xl mb-4" aria-hidden>💗</div>
       <h1 className="font-display text-3xl font-semibold mb-2">
-        Order Placed Successfully
+        Payment submitted for review
       </h1>
-      <p className="text-[var(--muted)] mb-6">Thank you for shopping with us</p>
+      <p className="text-[var(--muted)] mb-6">Your order is received. Our team will verify your bank transfer before confirming or preparing it.</p>
 
       <div className="text-left rounded-[var(--radius-lg)] border border-[var(--border)] bg-white p-6 mb-8 space-y-2 text-sm">
         <div className="flex justify-between">

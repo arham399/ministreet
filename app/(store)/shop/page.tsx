@@ -3,7 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { CategoryFilterDrawer } from "@/components/product/category-filter-drawer";
 import { CategorySortForm } from "@/components/product/category-sort-form";
 import { ProductCard, type ProductCardData } from "@/components/product/product-card";
-import { CATEGORIES } from "@/lib/constants";
+import { getStoreCategories } from "@/lib/db/drizzle/queries/categories";
 import { getProductPriceCeiling, getProducts } from "@/lib/db/queries/products";
 
 export const metadata = {
@@ -42,8 +42,9 @@ function queryHref(values: Record<string, string | undefined>) {
 
 export default async function ShopPage({ searchParams }: Props) {
   const sp = await searchParams;
+  const categories = await getStoreCategories();
   const requestedCategory = singleParam(sp.category);
-  const category = CATEGORIES.some((item) => item.slug === requestedCategory)
+  const category = categories.some((item) => item.slug === requestedCategory)
     ? requestedCategory
     : undefined;
   if (requestedCategory && !category) notFound();
@@ -212,6 +213,7 @@ export default async function ShopPage({ searchParams }: Props) {
             selectedCategory={category}
             searchQuery={q}
             showCategoryFilter
+            categories={categories}
           />
         </div>
       </div>

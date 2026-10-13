@@ -5,6 +5,13 @@ import { getDrizzleClient } from "@/lib/db/drizzle/client";
 import { invoice, order as orderTable, orderItem, orderStatusHistory, trackingEvent } from "@/lib/db/drizzle/schema";
 import { formatPrice } from "@/lib/utils";
 import { OrderStatusControl } from "@/components/admin/order-status-control";
+import { PaymentReviewControl } from "@/components/admin/payment-review-control";
+import { createPaymentProofSignedUrl } from "@/lib/storage/payment-proofs";
+import { OrderDeleteButton } from "@/components/admin/order-delete-button";
+import { auth } from "@/lib/auth/config";
+import { can } from "@/lib/auth/permissions";
+
+export const runtime = "nodejs";
 
 type Props = { params: Promise<{ id: string }> };
 
@@ -34,6 +41,13 @@ export default async function AdminOrderDetailPage({ params }: Props) {
 
   if (!foundOrder) notFound();
   const order = foundOrder;
+  const session = await auth();
+  const mayDeleteOrder = can(session?.user?.role, "orders:write");
+  let paymentProofUrl: string | null = null;
+  if (order.paymentProofPath) {
+    try { paymentProofUrl = await createPaymentProofSignedUrl(order.paymentProofPath); }
+    catch { /* Keep the admin page available if Storage is temporarily unavailable. */ }
+  }
 
   return (
     <div>
@@ -70,6 +84,25 @@ export default async function AdminOrderDetailPage({ params }: Props) {
             </p>
           </div>
           <div className="rounded-[var(--radius-md)] border border-[var(--border)] bg-white p-5">
+            <h2 className="font-semibold text-sm mb-3">Payment</h2>
+            <dl className="grid grid-cols-2 gap-y-2 text-sm">
+              <dt className="text-[var(--muted)]">Method</dt><dd>{order.paymentMethod.replaceAll("_", " ")}</dd>
+              <dt className="text-[var(--muted)]">Status</dt><dd className="font-medium">{order.paymentStatus}</dd>
+              <dt className="text-[var(--muted)]">Amount due</dt><dd>{formatPrice(Number(order.total))}</dd>
+            </dl>
+            {paymentProofUrl ? (
+              <a href={paymentProofUrl} target="_blank" rel="noreferrer" className="mt-4 inline-flex text-sm font-medium text-[var(--brand-pink)] underline underline-offset-4">
+                Open payment screenshot (private link)
+              </a>
+            ) : order.paymentProofPath ? (
+              <p className="mt-3 text-sm text-[var(--error)]">Payment screenshot is temporarily unavailable. Check Supabase Storage settings.</p>
+            ) : null}
+            {order.paymentProofPath && <PaymentReviewControl orderId={order.id} paymentStatus={order.paymentStatus} />}
+            {order.paymentMethod === "BANK_TRANSFER" && order.paymentStatus === "FAILED" && (
+              <p className="mt-3 text-sm text-[var(--error)]">Rejected payment cannot be fulfilled. Contact the customer to resolve it, or cancel the order to return stock.</p>
+            )}
+          </div>
+          <div className="rounded-[var(--radius-md)] border border-[var(--border)] bg-white p-5">
             <h2 className="font-semibold text-sm mb-3">Products</h2>
             <ul className="space-y-2 text-sm">
               {order.items.map((item) => (
@@ -102,12 +135,21 @@ export default async function AdminOrderDetailPage({ params }: Props) {
           </div>
         </div>
         <div>
+          <div className="mb-4 rounded-[var(--radius-md)] border border-[var(--border)] bg-white p-4">
           <OrderStatusControl
             orderId={order.id}
             currentStatus={order.status}
             courierName={order.courierName}
             courierTracking={order.courierTracking}
+            paymentMethod={order.paymentMethod}
+            paymentStatus={order.paymentStatus}
           />
+          </div>
+          {mayDeleteOrder && <div className="rounded-[var(--radius-md)] border border-red-100 bg-white p-4">
+            <h2 className="mb-2 text-sm font-semibold">Delete order</h2>
+            <p className="mb-3 text-xs text-[var(--muted)]">Only cancelled or delivered orders may be permanently removed.</p>
+            <OrderDeleteButton orderId={order.id} orderNumber={order.orderNumber} status={order.status} />
+          </div>}
         </div>
       </div>
     </div>

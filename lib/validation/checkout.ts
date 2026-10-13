@@ -14,7 +14,7 @@ export const checkoutSchema = z.object({
   shippingProvince: z.string().min(2, "Province is required").max(100),
   shippingPostalCode: z.string().max(20).optional().nullable(),
   deliveryNotes: z.string().max(500).optional().nullable(),
-  paymentMethod: z.enum(["COD", "CARD", "EASYPAISA", "JAZZCASH", "BANK_TRANSFER"]).default("COD"),
+  paymentMethod: z.literal("BANK_TRANSFER").default("BANK_TRANSFER"),
   couponCode: z.string().max(50).optional().nullable(),
   items: z
     .array(

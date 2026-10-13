@@ -47,7 +47,9 @@ export function useCartDiscountQuote() {
         if (!response.ok) throw new Error(result.error || "Unable to calculate discounts.");
         return result as CartDiscountQuote;
       })
-      .then(setQuote)
+      .then((result) => {
+        if (!controller.signal.aborted) setQuote(result);
+      })
       .catch((cause: unknown) => {
         if (controller.signal.aborted) return;
         setError(cause instanceof Error ? cause.message : "Unable to calculate discounts.");

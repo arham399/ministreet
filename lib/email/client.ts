@@ -111,7 +111,7 @@ export function orderReceivedEmailHtml(opts: {
 
   return `
   <div style="margin:0;background:#fff8fb;padding:32px 12px;font-family:Arial,Helvetica,sans-serif;color:#30252d">
-    <span style="display:none!important;visibility:hidden;opacity:0;color:transparent;height:0;width:0">Order ${escapeHtml(opts.orderNumber)} is confirmed. Thank you for shopping with Mini Street.</span>
+    <span style="display:none!important;visibility:hidden;opacity:0;color:transparent;height:0;width:0">Order ${escapeHtml(opts.orderNumber)} is awaiting payment verification. Thank you for shopping with Mini Street.</span>
     <table role="presentation" style="width:100%;max-width:600px;margin:0 auto;border-collapse:collapse;background:#fff;border:1px solid #f3dce9;border-radius:16px;overflow:hidden">
       <tr>
         <td style="padding:24px;text-align:center;background:#e91e8c;color:#fff">
@@ -121,9 +121,9 @@ export function orderReceivedEmailHtml(opts: {
       </tr>
       <tr>
         <td style="padding:34px 28px 28px">
-          <p style="margin:0 0 10px;color:#e91e8c;font-size:11px;font-weight:bold;letter-spacing:3px">ORDER CONFIRMED</p>
+          <p style="margin:0 0 10px;color:#e91e8c;font-size:11px;font-weight:bold;letter-spacing:3px">PAYMENT UNDER REVIEW</p>
           <h1 style="margin:0 0 14px;font-family:Georgia,serif;font-size:30px;font-weight:normal;line-height:1.25;color:#30252d">Thank you, ${escapeHtml(opts.customerName)}!</h1>
-          <p style="margin:0 0 22px;color:#746b72;font-size:15px;line-height:1.7">Your order is safely with us. We’ll prepare your treasures with care.</p>
+          <p style="margin:0 0 22px;color:#746b72;font-size:15px;line-height:1.7">We have received your order and payment screenshot. Our team will verify the transfer before confirming and preparing your order.</p>
           <table role="presentation" style="width:100%;margin:0 0 24px;border-collapse:collapse;background:#fff8fb;border:1px solid #f3dce9;border-radius:10px">
             <tr>
               <td style="padding:13px 15px;color:#746b72;font-size:13px">Order number</td>
@@ -161,6 +161,41 @@ export function orderReceivedEmailHtml(opts: {
           <p style="margin:0">Questions about your order? <a href="mailto:${escapeHtml(CONTACT_EMAIL)}" style="color:#b81770">Contact our team</a>.</p>
         </td>
       </tr>
+    </table>
+  </div>`;
+}
+
+export function orderPaymentReviewEmailHtml(opts: {
+  customerName: string;
+  orderNumber: string;
+  trackingId: string;
+  total: string;
+  outcome: "verify" | "reject";
+  trackUrl: string;
+}) {
+  const verified = opts.outcome === "verify";
+  const heading = verified ? "Your payment is verified" : "Your order has been cancelled";
+  const description = verified
+    ? "We have verified your bank transfer and your order is now confirmed for our team to prepare."
+    : "We could not verify the payment proof submitted for this order, so the order has been cancelled. If you have completed the transfer or believe this is a mistake, please contact our support team with your order number before placing another order.";
+  return `
+  <div style="margin:0;background:#fff8fb;padding:32px 12px;font-family:Arial,Helvetica,sans-serif;color:#30252d">
+    <span style="display:none!important;visibility:hidden;opacity:0;color:transparent;height:0;width:0">${escapeHtml(heading)} — Mini Street order ${escapeHtml(opts.orderNumber)}.</span>
+    <table role="presentation" style="width:100%;max-width:600px;margin:0 auto;border-collapse:collapse;background:#fff;border:1px solid #f3dce9;border-radius:16px;overflow:hidden">
+      <tr><td style="padding:24px;text-align:center;background:#e91e8c;color:#fff"><div style="font-family:Georgia,serif;font-size:30px;font-weight:bold;letter-spacing:1px">MINI STREET</div><div style="margin-top:5px;font-size:11px;letter-spacing:3px">ADORABLY ENCHANTING TREASURES</div></td></tr>
+      <tr><td style="padding:34px 28px 30px">
+        <p style="margin:0 0 10px;color:#e91e8c;font-size:11px;font-weight:bold;letter-spacing:3px">${verified ? "PAYMENT VERIFIED" : "PAYMENT REVIEW UPDATE"}</p>
+        <h1 style="margin:0 0 14px;font-family:Georgia,serif;font-size:28px;font-weight:normal;line-height:1.25;color:#30252d">${escapeHtml(heading)}</h1>
+        <p style="margin:0 0 22px;color:#746b72;font-size:15px;line-height:1.7">Hi ${escapeHtml(opts.customerName)}, ${escapeHtml(description)}</p>
+        <table role="presentation" style="width:100%;margin:0 0 24px;border-collapse:collapse;background:#fff8fb;border:1px solid #f3dce9;border-radius:10px">
+          <tr><td style="padding:13px 15px;color:#746b72;font-size:13px">Order number</td><td style="padding:13px 15px;color:#30252d;font-size:14px;font-weight:bold;text-align:right">${escapeHtml(opts.orderNumber)}</td></tr>
+          <tr><td style="padding:0 15px 13px;color:#746b72;font-size:13px">Tracking ID</td><td style="padding:0 15px 13px;color:#30252d;font-size:14px;font-weight:bold;text-align:right">${escapeHtml(opts.trackingId)}</td></tr>
+          <tr><td style="padding:0 15px 13px;color:#746b72;font-size:13px">Order total</td><td style="padding:0 15px 13px;color:#b81770;font-size:14px;font-weight:bold;text-align:right">${escapeHtml(opts.total)}</td></tr>
+        </table>
+        <table role="presentation" align="center" cellspacing="0" cellpadding="0" border="0" style="margin:28px auto 0"><tr><td align="center" bgcolor="#e91e8c" style="border-radius:8px"><a href="${escapeHtml(opts.trackUrl)}" style="display:inline-block;padding:14px 28px;border-radius:8px;background:#e91e8c;color:#fff;font-size:15px;font-weight:bold;line-height:20px;text-align:center;text-decoration:none">View order status</a></td></tr></table>
+        <p style="margin:22px 0 0;color:#746b72;font-size:13px;line-height:1.7">Questions? Contact us at <a href="mailto:${escapeHtml(CONTACT_EMAIL)}" style="color:#b81770">${escapeHtml(CONTACT_EMAIL)}</a>.</p>
+      </td></tr>
+      <tr><td style="padding:20px 28px 24px;border-top:1px solid #f3dce9;text-align:center;color:#887c84;font-size:12px;line-height:1.7">With love, Mini Street</td></tr>
     </table>
   </div>`;
 }
@@ -233,6 +268,7 @@ export function newOrderNotificationEmailHtml(opts: {
   discount?: string | null;
   total: string;
   shippingAddress: string;
+  orderAdminUrl: string;
 }) {
   const itemRows = opts.items
     .map(
@@ -254,7 +290,7 @@ export function newOrderNotificationEmailHtml(opts: {
 
   return `
   <div style="margin:0;background:#fff8fb;padding:32px 12px;font-family:Arial,Helvetica,sans-serif;color:#30252d">
-    <span style="display:none!important;visibility:hidden;opacity:0;color:transparent;height:0;width:0">New order ${escapeHtml(opts.orderNumber)} received by Mini Street.</span>
+    <span style="display:none!important;visibility:hidden;opacity:0;color:transparent;height:0;width:0">New prepaid order ${escapeHtml(opts.orderNumber)} is waiting for payment verification.</span>
     <table role="presentation" style="width:100%;max-width:640px;margin:0 auto;border-collapse:collapse;background:#fff;border:1px solid #f3dce9;border-radius:16px;overflow:hidden">
       <tr>
         <td style="padding:24px;text-align:center;background:#e91e8c;color:#fff">
@@ -281,7 +317,7 @@ export function newOrderNotificationEmailHtml(opts: {
               </td>
             </tr>
           </table>
-          <h2 style="margin:0 0 10px;color:#30252d;font-size:16px">Items to prepare</h2>
+          <h2 style="margin:0 0 10px;color:#30252d;font-size:16px">Order items</h2>
           <table role="presentation" style="width:100%;border-collapse:collapse">
             <thead><tr><th style="padding:8px;text-align:left;border-bottom:1px solid #f3dce9;color:#887c84;font-size:11px;font-weight:normal;letter-spacing:1px">ITEM</th><th style="padding:8px;text-align:center;border-bottom:1px solid #f3dce9;color:#887c84;font-size:11px;font-weight:normal;letter-spacing:1px">QTY</th><th style="padding:8px;text-align:right;border-bottom:1px solid #f3dce9;color:#887c84;font-size:11px;font-weight:normal;letter-spacing:1px">AMOUNT</th></tr></thead>
             <tbody>${itemRows}</tbody>
@@ -292,7 +328,8 @@ export function newOrderNotificationEmailHtml(opts: {
               <tr><td colspan="2" style="padding:12px 8px;border-top:1px solid #f3dce9;color:#30252d;font-size:16px;font-weight:bold;text-align:right">Order total</td><td style="padding:12px 8px;border-top:1px solid #f3dce9;color:#b81770;font-size:17px;font-weight:bold;text-align:right;white-space:nowrap">${escapeHtml(opts.total)}</td></tr>
             </tfoot>
           </table>
-          <p style="margin:22px 0 0;padding:13px 15px;border-left:3px solid #e91e8c;background:#fff8fb;color:#746b72;font-size:13px;line-height:1.6">Please review the delivery details and begin preparing this order.</p>
+          <p style="margin:22px 0 0;padding:13px 15px;border-left:3px solid #e91e8c;background:#fff8fb;color:#746b72;font-size:13px;line-height:1.6"><strong>Payment screenshot submitted.</strong> Please verify the transfer in the admin order page before confirming or fulfilling this order. The screenshot is kept private and is not attached to this email.</p>
+          <table role="presentation" align="center" cellspacing="0" cellpadding="0" border="0" style="margin:22px auto 0"><tr><td align="center" bgcolor="#e91e8c" style="border-radius:8px"><a href="${escapeHtml(opts.orderAdminUrl)}" style="display:inline-block;padding:12px 22px;border-radius:8px;background:#e91e8c;color:#fff;font-size:14px;font-weight:bold;text-align:center;text-decoration:none">Review order &amp; payment</a></td></tr></table>
         </td>
       </tr>
       <tr>

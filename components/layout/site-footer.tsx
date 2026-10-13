@@ -1,9 +1,10 @@
 import Link from "next/link";
 import { Facebook, Instagram } from "lucide-react";
-import { CATEGORIES, CONTACT_PHONE_LINK, FACEBOOK_URL, INSTAGRAM_URL, SITE_NAME } from "@/lib/constants";
+import { CONTACT_PHONE_LINK, FACEBOOK_URL, INSTAGRAM_URL, SITE_NAME } from "@/lib/constants";
+import type { StoreCategory } from "@/lib/db/drizzle/queries/categories";
 import { NewsletterSignup } from "@/components/layout/newsletter-signup";
 
-export function SiteFooter() {
+export function SiteFooter({ categories }: { categories: StoreCategory[] }) {
   return (
     <footer className="bg-white border-t border-[var(--border)] mt-8">
       {/* Newsletter */}
@@ -50,7 +51,7 @@ export function SiteFooter() {
               Categories
             </h4>
             <ul className="space-y-2.5 text-sm text-[var(--muted)]">
-              {CATEGORIES.map((c) => (
+              {categories.map((c) => (
                 <li key={c.slug}>
                   <Link href={`/shop/${c.slug}`} className="hover:text-[var(--brand-pink)] transition-colors">
                     {c.name}

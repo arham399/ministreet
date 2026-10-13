@@ -269,7 +269,7 @@ export function NewsletterCampaignForm({ activeCount }: { activeCount: number })
       <AlertDialog.Root open={isConfirmOpen} onOpenChange={setIsConfirmOpen}>
         <AlertDialog.Portal>
           <AlertDialog.Overlay className="fixed inset-0 z-50 bg-[#21151d]/55 backdrop-blur-[2px] data-[state=open]:animate-in data-[state=open]:fade-in" />
-          <AlertDialog.Content className="fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-2xl border border-[#f3dce9] bg-white shadow-2xl focus:outline-none">
+          <AlertDialog.Content className="admin-dialog fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-[#f3dce9] bg-white shadow-2xl focus:outline-none">
             <div className="bg-gradient-to-r from-[var(--brand-pink)] to-[#c81773] px-6 py-5 text-white">
               <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-white/80">
                 Mini Street Club

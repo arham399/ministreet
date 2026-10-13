@@ -10,12 +10,9 @@ environment variables locally and in the deployment environment:
   schema introspection.
 
 The app's runtime reads and writes, including Auth.js, catalog, checkout,
-orders, and admin operations, use Drizzle. Prisma is no longer an application
-runtime dependency. The Prisma schemas and migrations remain in the repository
-as a legacy reference and for the optional local SQLite-to-PostgreSQL transfer
-utility; they are not used by the deployed app.
-The install hook generates those legacy clients solely for the optional transfer
-utility and type-checking its source; application routes do not import them.
+orders, and admin operations, use Drizzle. Legacy ORM code, dependencies, and
+install hooks have been removed. Local SQLite backups, if present, are archived
+only and are not read by the app.
 
 The current Supabase schema was initialized and the local SQLite records were
 transferred and row-count verified. Do not rerun the transfer against the
@@ -50,23 +47,30 @@ and regenerates the Drizzle schema. Review the resulting changes before
 committing. `npm run db:seed` inserts development sample data; do not run it
 against production unless that data is intended.
 
-The optional `npm run db:transfer:local` utility imports data from the retained
-SQLite database. It refuses to write when application tables at the destination
-are non-empty, wraps the import in a transaction, verifies per-table row
-counts, and does not modify the SQLite source. Use `-- --dry-run` to review a
-transfer first. To choose another SQLite file, set
-`LOCAL_SQLITE_DATABASE_URL` to its `file:` URL. The transfer utility needs the
-legacy Prisma CLI/client to inspect the two historical Prisma schemas.
-
 Keep database credentials private and out of source control. Configure the
 application environment with `AUTH_SECRET`, `NEXT_PUBLIC_APP_URL`, `GMAIL_USER`,
-`GMAIL_APP_PASSWORD`, `ORDER_NOTIFICATION_EMAIL`, and `CLOUDINARY_*` as needed.
+`GMAIL_APP_PASSWORD`, `ORDER_NOTIFICATION_EMAIL`, `SUPABASE_URL`,
+`SUPABASE_SERVICE_ROLE_KEY`, and `CLOUDINARY_*` as needed. The service-role key
+is server-only and must never use a `NEXT_PUBLIC_` prefix.
 
 ## Other services
 
 - **Product images:** Cloudinary
-- **Payment-proof uploads:** not enabled; use a private Supabase Storage bucket
-  with server-side access controls if implementing this feature
+- **Payment-proof uploads:** private Supabase Storage bucket named
+  `payment-proofs`; the migration creates/configures it as private and limits
+  uploads to 5 MB JPEG, PNG, and WebP. Only server code accesses it with the
+  service-role key. Admins see a five-minute signed link on the order detail
+  page. Proofs are not attached to email.
+- **Order retention:** admins may permanently delete only cancelled or delivered
+  orders. The order, items, invoice, associated email logs, inventory movements,
+  tracking history, and payment proof object are removed. A minimal audit entry
+  is retained to record who performed the deletion. If Storage cleanup fails,
+  the admin receives a notice to remove that object from the private bucket.
+- **Category deletion:** removes the category and unassigns products from it;
+  products and their shared Cloudinary images are retained.
+- **Database exports:** Owner/Admin can download application data as Excel XML
+  workbook (`.xls`) or PDF from Admin → Database exports. Authentication
+  tokens, password hashes, and payment proof paths are excluded.
 - **Email:** Gmail SMTP using a Google App Password
 
 ## Post-deploy checklist
@@ -74,6 +78,8 @@ application environment with `AUTH_SECRET`, `NEXT_PUBLIC_APP_URL`, `GMAIL_USER`,
 - [ ] Homepage loads with logo
 - [ ] Shop and product pages work
 - [ ] Cart → checkout → order creates in the database
+- [ ] Bank transfer proof uploads to the private bucket and appears in the admin order page
+- [ ] Admin verifies a transfer before confirming or fulfilling a prepaid order
 - [ ] Inventory decrements
 - [ ] Tracking page shows timeline
 - [ ] Admin can view and update orders
