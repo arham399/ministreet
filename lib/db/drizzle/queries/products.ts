@@ -8,6 +8,7 @@ import {
   inArray,
   isNotNull,
   isNull,
+  ne,
   or,
   sql,
   type SQL,
@@ -32,6 +33,9 @@ export type ProductListFilters = {
   inStock?: boolean;
   onSale?: boolean;
   newArrival?: boolean;
+  featuredOnly?: boolean;
+  all?: boolean;
+  excludeId?: string;
   sort?: string;
   page?: number;
   limit?: number;
@@ -85,6 +89,29 @@ async function loadProductDetails(productIds: string[]) {
   return { images, ratings };
 }
 
+async function loadColorGroupStats(products: { id: string; colorGroupId: string | null }[]) {
+  const groupIds = products
+    .filter((item) => item.colorGroupId === item.id)
+    .map((item) => item.id);
+  if (groupIds.length === 0) return new Map<string, { count: number; stock: number }>();
+  const { db } = getDrizzleClient();
+  const rows = await db.select({
+    groupId: product.colorGroupId,
+    stock: product.stockQuantity,
+  }).from(product).where(and(
+    inArray(product.colorGroupId, groupIds),
+    eq(product.isActive, true),
+    isNull(product.archivedAt),
+  ));
+  const stats = new Map<string, { count: number; stock: number }>();
+  for (const row of rows) {
+    if (!row.groupId) continue;
+    const current = stats.get(row.groupId) || { count: 0, stock: 0 };
+    stats.set(row.groupId, { count: current.count + 1, stock: current.stock + row.stock });
+  }
+  return stats;
+}
+
 function averageRating(ratings: number[] | undefined) {
   return ratings?.length
     ? ratings.reduce((sum, rating) => sum + rating, 0) / ratings.length
@@ -96,6 +123,7 @@ export async function getProductPriceCeilingWithDrizzle(categorySlug?: string) {
   const conditions: SQL[] = [
     eq(product.isActive, true),
     isNull(product.archivedAt),
+    or(isNull(product.colorGroupId), eq(product.colorGroupId, product.id))!,
   ];
   if (categorySlug) conditions.push(eq(category.slug, categorySlug));
 
@@ -120,11 +148,14 @@ export async function getProductsWithDrizzle(filters: ProductListFilters = {}) {
   const conditions: SQL[] = [
     eq(product.isActive, true),
     isNull(product.archivedAt),
+    or(isNull(product.colorGroupId), eq(product.colorGroupId, product.id))!,
   ];
 
   if (filters.category) conditions.push(eq(category.slug, filters.category));
+  if (filters.excludeId) conditions.push(ne(product.id, filters.excludeId));
   if (filters.inStock) conditions.push(gt(product.stockQuantity, 0));
   if (filters.newArrival) conditions.push(eq(product.isNewArrival, true));
+  if (filters.featuredOnly) conditions.push(eq(product.isFeatured, true));
   if (filters.q) {
     const search = `%${filters.q}%`;
     const taggedProductIds = getDrizzleClient().db
@@ -166,7 +197,7 @@ export async function getProductsWithDrizzle(filters: ProductListFilters = {}) {
     .where(and(...conditions))
     .orderBy(sortExpression)
     .$dynamic();
-  const rows: ProductWithCategory[] = priceSensitive
+  const rows: ProductWithCategory[] = priceSensitive || filters.all
     ? await query
     : await query.limit(limit).offset(skip);
   const total = priceSensitive
@@ -179,6 +210,7 @@ export async function getProductsWithDrizzle(filters: ProductListFilters = {}) {
         .then(([row]) => row?.count ?? 0);
 
   const details = await loadProductDetails(rows.map((row) => row.product.id));
+  const colorGroupStats = await loadColorGroupStats(rows.map(({ product: current }) => ({ id: current.id, colorGroupId: current.colorGroupId })));
   const rules = await getActiveAutomaticDiscountsWithDrizzle();
   const automaticPrices = applyAutomaticDiscounts(
     rows.map((row) => row.product),
@@ -219,11 +251,13 @@ export async function getProductsWithDrizzle(filters: ProductListFilters = {}) {
         id: current.id,
         name: current.name,
         slug: current.slug,
+        colorName: current.colorName,
         price: Number(current.price),
         salePrice: effectivePrice < Number(current.price) ? effectivePrice : null,
         imageUrl: details.images.get(current.id)?.find((image) => image.isPrimary)?.url ?? null,
         isNewArrival: current.isNewArrival,
-        stockQuantity: current.stockQuantity,
+        stockQuantity: colorGroupStats.get(current.id)?.stock ?? current.stockQuantity,
+        colorCount: colorGroupStats.get(current.id)?.count ?? 0,
         averageRating: averageRating(ratings),
         categorySlug: currentCategory?.slug,
       };
@@ -286,14 +320,18 @@ export async function getBestSellersWithDrizzle(limit = 8) {
   const ids = top.map((row) => row.productId).filter((id): id is string => !!id);
   if (ids.length === 0) return getProductsWithDrizzle({ limit, sort: "featured" });
 
+  const purchasedProducts = await db.select({ id: product.id, colorGroupId: product.colorGroupId })
+    .from(product).where(inArray(product.id, ids));
+  const displayIds = [...new Set(purchasedProducts.map((item) => item.colorGroupId || item.id))];
   const products = await db
     .select({ product, category })
     .from(product)
     .leftJoin(category, eq(product.categoryId, category.id))
-    .where(and(inArray(product.id, ids), eq(product.isActive, true), isNull(product.archivedAt)));
+    .where(and(inArray(product.id, displayIds), eq(product.isActive, true), isNull(product.archivedAt)));
   const byId = new Map(products.map((row) => [row.product.id, row]));
-  const ordered = ids.map((id) => byId.get(id)).filter((row): row is ProductWithCategory => !!row);
+  const ordered = displayIds.map((id) => byId.get(id)).filter((row): row is ProductWithCategory => !!row);
   const details = await loadProductDetails(ordered.map((row) => row.product.id));
+  const colorGroupStats = await loadColorGroupStats(ordered.map(({ product: current }) => ({ id: current.id, colorGroupId: current.colorGroupId })));
   const rules = await getActiveAutomaticDiscountsWithDrizzle();
   const automaticPrices = applyAutomaticDiscounts(ordered.map((row) => row.product), rules);
 
@@ -306,11 +344,13 @@ export async function getBestSellersWithDrizzle(limit = 8) {
         id: current.id,
         name: current.name,
         slug: current.slug,
+        colorName: current.colorName,
         price: Number(current.price),
         salePrice: effectivePrice < Number(current.price) ? effectivePrice : null,
         imageUrl: details.images.get(current.id)?.find((image) => image.isPrimary)?.url ?? null,
         isNewArrival: current.isNewArrival,
-        stockQuantity: current.stockQuantity,
+        stockQuantity: colorGroupStats.get(current.id)?.stock ?? current.stockQuantity,
+        colorCount: colorGroupStats.get(current.id)?.count ?? 0,
         averageRating: averageRating(details.ratings.get(current.id)),
       };
     }),

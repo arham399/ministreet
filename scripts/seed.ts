@@ -1,5 +1,12 @@
 import bcrypt from "bcryptjs";
 import { eq } from "drizzle-orm";
+import {
+  CONTACT_EMAIL,
+  CONTACT_PHONE,
+  DEFAULT_SHIPPING_COST,
+  FREE_SHIPPING_THRESHOLD,
+  SITE_TAGLINE,
+} from "@/lib/constants";
 import { getDrizzleClient } from "@/lib/db/drizzle/client";
 import {
   category,
@@ -122,21 +129,18 @@ async function main() {
     }
 
     const settings = [
-      { key: "announcement_text", value: "Adorably enchanting treasures, made to sparkle with you." },
+      { key: "announcement_text", value: SITE_TAGLINE },
       { key: "announcement_visible", value: "true" },
-      { key: "store_email", value: "STORE_EMAIL" },
-      { key: "store_phone", value: "STORE_PHONE" },
-      { key: "free_shipping_threshold", value: "5000" },
-      { key: "default_shipping_cost", value: "250" },
+      { key: "store_email", value: CONTACT_EMAIL },
+      { key: "store_phone", value: CONTACT_PHONE },
+      { key: "free_shipping_threshold", value: String(FREE_SHIPPING_THRESHOLD) },
+      { key: "default_shipping_cost", value: String(DEFAULT_SHIPPING_COST) },
     ];
     for (const setting of settings) {
       await db
         .insert(siteSetting)
         .values({ ...setting, updatedAt: new Date() })
-        .onConflictDoUpdate({
-          target: siteSetting.key,
-          set: { value: setting.value, updatedAt: new Date() },
-        });
+        .onConflictDoNothing({ target: siteSetting.key });
     }
 
     const faqs = [

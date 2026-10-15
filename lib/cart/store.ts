@@ -7,6 +7,7 @@ export type CartItem = {
   productId: string;
   slug: string;
   name: string;
+  colorName?: string | null;
   imageUrl?: string | null;
   unitPrice: number;
   salePrice?: number | null;
@@ -31,7 +32,7 @@ export const useCartStore = create<CartState>()(
       addItem: (item) => {
         const qty = item.quantity ?? 1;
         set((state) => {
-          const existing = state.items.find((i) => i.productId === item.productId);
+        const existing = state.items.find((i) => i.productId === item.productId);
           if (existing) {
             const newQty = Math.min(
               existing.quantity + qty,

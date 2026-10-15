@@ -1,10 +1,41 @@
 import { NextRequest, NextResponse } from "next/server";
+import { eq, sql } from "drizzle-orm";
 import { getDrizzleClient } from "@/lib/db/drizzle/client";
 import { auditLog, product, productImage, productTag } from "@/lib/db/drizzle/schema";
 import { auth, isAdminRole } from "@/lib/auth/config";
 import { productSchema } from "@/lib/validation/product";
 import { getProducts } from "@/lib/db/queries/products";
 import { slugify } from "@/lib/utils";
+
+async function getAvailableProductSlug(tx: Parameters<Parameters<ReturnType<typeof getDrizzleClient>["db"]["transaction"]>[0]>[0], baseSlug: string, sku: string) {
+  // Product URLs must stay unique. Color variants share a display name, so give
+  // any later listing a stable SKU suffix when the base slug is already taken.
+  await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`product-slug:${baseSlug}`}))`);
+
+  const skuSuffix = slugify(sku) || "variant";
+  let candidate = baseSlug;
+  let suffixNumber = 1;
+
+  while (true) {
+    const [existing] = await tx.select({ id: product.id }).from(product).where(eq(product.slug, candidate)).limit(1);
+    if (!existing) return candidate;
+
+    candidate = suffixNumber === 1
+      ? `${baseSlug}-${skuSuffix}`
+      : `${baseSlug}-${skuSuffix}-${suffixNumber}`;
+    suffixNumber += 1;
+  }
+}
+
+function findPostgresError(error: unknown): { code?: string; constraint?: string } {
+  if (!error || typeof error !== "object") return {};
+  const current = error as { code?: unknown; constraint?: unknown; cause?: unknown };
+  const cause = current.cause && current.cause !== error ? findPostgresError(current.cause) : {};
+  return {
+    code: typeof current.code === "string" ? current.code : cause.code,
+    constraint: typeof current.constraint === "string" ? current.constraint : cause.constraint,
+  };
+}
 
 export async function GET(req: NextRequest) {
   try {
@@ -48,11 +79,12 @@ export async function POST(req: NextRequest) {
     const data = parsed.data;
     const { db } = getDrizzleClient();
     const createdProduct = await db.transaction(async (tx) => {
+      const uniqueSlug = await getAvailableProductSlug(tx, data.slug, data.sku);
       const [savedProduct] = await tx.insert(product).values({
         id: globalThis.crypto.randomUUID(),
         updatedAt: new Date(),
         name: data.name,
-        slug: data.slug,
+        slug: uniqueSlug,
         sku: data.sku,
         description: data.description,
         price: String(data.price),
@@ -104,10 +136,13 @@ export async function POST(req: NextRequest) {
     }, { status: 201 });
   } catch (err: unknown) {
     console.error(err);
-    const msg = err instanceof Error ? err.message : "Failed to create product";
-    if (msg.includes("Unique constraint") || (err && typeof err === "object" && "code" in err && err.code === "23505")) {
-      return NextResponse.json({ error: "SKU or slug already exists" }, { status: 409 });
+    const postgresError = findPostgresError(err);
+    if (postgresError.code === "23505") {
+      const message = postgresError.constraint?.includes("sku")
+        ? "This SKU is already assigned to another product. Enter a unique SKU for each color."
+        : "A product with this information already exists. Check the SKU and try again.";
+      return NextResponse.json({ error: message }, { status: 409 });
     }
-    return NextResponse.json({ error: msg }, { status: 500 });
+    return NextResponse.json({ error: "We couldn't save the product right now. Please try again." }, { status: 500 });
   }
 }

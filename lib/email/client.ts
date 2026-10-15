@@ -42,10 +42,11 @@ export async function sendEmail(params: {
   to: string;
   subject: string;
   html: string;
+  replyTo?: string;
   template?: string;
   orderId?: string;
 }) {
-  const { to, subject, html, template = "generic", orderId } = params;
+  const { to, subject, html, replyTo, template = "generic", orderId } = params;
 
   if (!transporter || !gmailUser) {
     const error = "Gmail SMTP is not configured. Set GMAIL_USER and GMAIL_APP_PASSWORD in .env.";
@@ -60,6 +61,7 @@ export async function sendEmail(params: {
       to,
       subject,
       html,
+      ...(replyTo ? { replyTo } : {}),
     });
     await logEmail({ to, subject, template, status: "SENT", orderId });
     return { success: true, id: result.messageId };
@@ -82,6 +84,28 @@ function escapeHtml(value: string) {
     };
     return entities[character];
   });
+}
+
+export function contactMessageNotificationEmailHtml(opts: {
+  name: string;
+  email: string;
+  orderNumber?: string | null;
+  subject: string;
+  message: string;
+}) {
+  const message = escapeHtml(opts.message).replace(/\r?\n/g, "<br/>");
+  return `
+  <div style="margin:0;background:#fff8fb;padding:32px 12px;font-family:Arial,Helvetica,sans-serif;color:#30252d">
+    <table role="presentation" style="width:100%;max-width:620px;margin:0 auto;border-collapse:collapse;background:#fff;border:1px solid #f3dce9;border-radius:16px;overflow:hidden">
+      <tr><td style="padding:22px 26px;background:#e91e8c;color:#fff"><div style="font-family:Georgia,serif;font-size:26px;font-weight:bold">MINI STREET</div><div style="margin-top:4px;font-size:11px;letter-spacing:2px">NEW WEBSITE MESSAGE</div></td></tr>
+      <tr><td style="padding:26px">
+        <h1 style="margin:0 0 20px;font-family:Georgia,serif;font-size:25px;font-weight:normal">${escapeHtml(opts.subject)}</h1>
+        <p style="margin:0 0 8px;color:#746b72;font-size:14px"><strong style="color:#30252d">From:</strong> ${escapeHtml(opts.name)} &lt;<a href="mailto:${escapeHtml(opts.email)}" style="color:#b81770">${escapeHtml(opts.email)}</a>&gt;</p>
+        <p style="margin:0 0 20px;color:#746b72;font-size:14px"><strong style="color:#30252d">Order number:</strong> ${escapeHtml(opts.orderNumber || "Not provided")}</p>
+        <div style="padding:18px;border-radius:10px;background:#fff8fb;color:#51464e;font-size:15px;line-height:1.7">${message}</div>
+      </td></tr>
+    </table>
+  </div>`;
 }
 
 export function orderReceivedEmailHtml(opts: {

@@ -6,16 +6,17 @@ import { Trash2, Minus, Plus } from "lucide-react";
 import { useCartStore } from "@/lib/cart/store";
 import { formatPrice } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { FREE_SHIPPING_THRESHOLD, DEFAULT_SHIPPING_COST } from "@/lib/constants";
+import { useShippingSettings } from "@/components/providers/shipping-settings-provider";
 import { CartHydration } from "@/components/providers/cart-provider";
 import { useCartDiscountQuote } from "@/hooks/use-cart-discount-quote";
 
 function CartContent() {
   const { items, updateQuantity, removeItem, getSubtotal } = useCartStore();
+  const { freeShippingThreshold, defaultShippingCost } = useShippingSettings();
   const { quote, error: quoteError, loading: quoteLoading } = useCartDiscountQuote();
   const quotedPrices = new Map(quote?.items.map((item) => [item.productId, item.unitPrice]) ?? []);
   const subtotal = quote?.subtotal ?? getSubtotal();
-  const shipping = subtotal >= FREE_SHIPPING_THRESHOLD ? 0 : DEFAULT_SHIPPING_COST;
+  const shipping = subtotal >= freeShippingThreshold ? 0 : defaultShippingCost;
   const total = subtotal + shipping;
 
   if (items.length === 0) {
@@ -61,6 +62,9 @@ function CartContent() {
                   >
                     {item.name}
                   </Link>
+                  {item.colorName && (
+                    <p className="mt-1 text-xs text-[var(--muted)]">Color: {item.colorName}</p>
+                  )}
                   <div className="mt-1 flex items-baseline gap-2">
                     <p className="text-sm font-semibold">{formatPrice(price)}</p>
                     {price < item.unitPrice && (
@@ -130,9 +134,9 @@ function CartContent() {
                   )}
                 </span>
               </div>
-              {subtotal < FREE_SHIPPING_THRESHOLD && (
+              {subtotal < freeShippingThreshold && (
                 <p className="text-xs text-[var(--muted)]">
-                  Add {formatPrice(FREE_SHIPPING_THRESHOLD - subtotal)} more for free shipping
+                  Add {formatPrice(freeShippingThreshold - subtotal)} more for free shipping
                 </p>
               )}
               <div className="border-t border-[var(--border)] pt-3 flex justify-between font-semibold text-base">

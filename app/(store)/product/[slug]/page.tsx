@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, isNull, sql } from "drizzle-orm";
 import { getDrizzleClient } from "@/lib/db/drizzle/client";
 import { category as categoryTable, product as productTable, productImage, review } from "@/lib/db/drizzle/schema";
 import { formatPrice, formatDiscount } from "@/lib/utils";
@@ -13,6 +13,9 @@ import {
   type AutomaticDiscountRule,
 } from "@/lib/discounts/apply-automatic-discounts";
 import { getActiveAutomaticDiscounts } from "@/lib/discounts/queries";
+import { getProducts } from "@/lib/db/queries/products";
+import { RelatedProducts } from "@/components/product/related-products";
+import { ColorVariantSelector, type ColorOptionLink } from "@/components/product/color-variant-selector";
 
 type Props = { params: Promise<{ slug: string }> };
 
@@ -47,6 +50,7 @@ export default async function ProductPage({ params }: Props) {
     images: (typeof productImage.$inferSelect)[];
     category: typeof categoryTable.$inferSelect | null;
     reviews: (typeof review.$inferSelect)[];
+    colorOptions: ColorOptionLink[];
   }) | null = null;
   try {
     const { db } = getDrizzleClient();
@@ -56,7 +60,7 @@ export default async function ProductPage({ params }: Props) {
       .where(eq(productTable.slug, slug))
       .limit(1);
     if (foundProduct) {
-      const [images, categories, reviews] = await Promise.all([
+      const [images, categories, reviews, colorRows] = await Promise.all([
         db
           .select()
           .from(productImage)
@@ -73,12 +77,31 @@ export default async function ProductPage({ params }: Props) {
             eq(review.status, "APPROVED"),
           ))
           .limit(10),
+        foundProduct.colorGroupId
+          ? db.select({
+              id: productTable.id,
+              slug: productTable.slug,
+              name: productTable.colorName,
+              hex: productTable.colorHex,
+              stockQuantity: sql<number>`${productTable.stockQuantity} - ${productTable.reservedStock}`.mapWith(Number),
+            }).from(productTable)
+              .where(and(
+                eq(productTable.colorGroupId, foundProduct.colorGroupId),
+                eq(productTable.isActive, true),
+                isNull(productTable.archivedAt),
+              ))
+              .orderBy(
+                sql`CASE WHEN ${productTable.id} = ${foundProduct.colorGroupId} THEN 0 ELSE 1 END`,
+                asc(productTable.createdAt),
+              )
+          : Promise.resolve([]),
       ]);
       product = {
         ...foundProduct,
         images,
         category: categories[0] ?? null,
         reviews,
+        colorOptions: colorRows,
       };
     }
   } catch {
@@ -167,7 +190,34 @@ export default async function ProductPage({ params }: Props) {
   ).get(product.id);
   const effectivePrice = automaticPrice?.unitPrice ?? Number(product.salePrice ?? product.price);
   const onSale = effectivePrice < Number(product.price);
-  const inStock = product.stockQuantity > 0;
+  const availableStock = Math.max(0, product.stockQuantity - product.reservedStock);
+  const inStock = availableStock > 0;
+  const isLowStock = inStock && product.trackInventory && availableStock <= product.lowStockThreshold;
+  const stockLabel = !inStock
+    ? "Sold out"
+    : isLowStock
+      ? `Only ${availableStock} left`
+      : "In stock";
+  const stockClassName = !inStock
+    ? "text-[var(--error)]"
+    : isLowStock
+      ? "text-amber-700"
+      : "text-[var(--success)]";
+
+  let relatedProducts: Awaited<ReturnType<typeof getProducts>>["products"] = [];
+  if (product.category) {
+    try {
+      const related = await getProducts({
+        category: product.category.slug,
+        excludeId: product.id,
+        limit: 8,
+        sort: "featured",
+      });
+      relatedProducts = related.products;
+    } catch {
+      relatedProducts = [];
+    }
+  }
 
   return (
     <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
@@ -221,9 +271,11 @@ export default async function ProductPage({ params }: Props) {
               </>
             )}
           </div>
-          <p className={cnStock(inStock)}>
-            {inStock ? "● In Stock" : "● Sold Out"}
+          <p className={`mb-4 flex items-center gap-2 text-sm font-medium ${stockClassName}`} role="status">
+            <span aria-hidden="true" className="text-[0.65rem]">●</span>
+            {stockLabel}
           </p>
+          <ColorVariantSelector options={product.colorOptions} selectedProductId={product.id} />
           {product.description && (
             <p className="text-[var(--muted)] my-6 leading-relaxed">{product.description}</p>
           )}
@@ -232,9 +284,10 @@ export default async function ProductPage({ params }: Props) {
               productId: product.id,
               slug: product.slug,
               name: product.name,
+              colorName: product.colorName,
               unitPrice: Number(product.price),
               salePrice: onSale ? effectivePrice : null,
-              stockQuantity: product.stockQuantity,
+              stockQuantity: availableStock,
               imageUrl: product.images[0]?.url || null,
             }}
             disabled={!inStock}
@@ -254,10 +307,9 @@ export default async function ProductPage({ params }: Props) {
           </div>
         </div>
       </div>
+
+      <RelatedProducts products={relatedProducts} />
     </div>
   );
 }
 
-function cnStock(inStock: boolean) {
-  return `text-sm mb-4 ${inStock ? "text-[var(--success)]" : "text-[var(--error)]"}`;
-}

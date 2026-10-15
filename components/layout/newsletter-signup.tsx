@@ -1,6 +1,57 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
+
+const newsletterMessages = [
+  "Be first to hear about new arrivals and fresh little finds.",
+  "Enjoy special offers picked just for our Mini Street community.",
+  "A little sparkle, lovely updates, and surprises in your inbox.",
+];
+
+export function NewsletterDescription() {
+  const [messageIndex, setMessageIndex] = useState(0);
+  const [displayedMessage, setDisplayedMessage] = useState(newsletterMessages[0]);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  useEffect(() => {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+
+    const currentMessage = newsletterMessages[messageIndex];
+    const isMessageComplete = displayedMessage === currentMessage;
+    const delay = isDeleting
+      ? 28
+      : isMessageComplete
+        ? 1800
+        : displayedMessage.length === 0
+          ? 350
+          : 45;
+
+    const timeout = window.setTimeout(() => {
+      if (isMessageComplete && !isDeleting) {
+        setIsDeleting(true);
+      } else if (isDeleting && displayedMessage.length === 0) {
+        setMessageIndex((index) => (index + 1) % newsletterMessages.length);
+        setIsDeleting(false);
+      } else if (isDeleting) {
+        setDisplayedMessage((message) => message.slice(0, -1));
+      } else {
+        setDisplayedMessage((message) => currentMessage.slice(0, message.length + 1));
+      }
+    }, delay);
+
+    return () => window.clearTimeout(timeout);
+  }, [displayedMessage, isDeleting, messageIndex]);
+
+  return (
+    <p
+      className="newsletter-description mx-auto mb-6 flex min-h-14 items-center justify-center text-sm leading-relaxed text-[var(--muted)]"
+      aria-live="off"
+    >
+      <span>{displayedMessage}</span>
+      <span className="newsletter-caret ml-0.5 h-4 border-l border-[var(--brand-pink)]" aria-hidden="true" />
+    </p>
+  );
+}
 
 export function NewsletterSignup() {
   const [message, setMessage] = useState("");

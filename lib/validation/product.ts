@@ -16,6 +16,15 @@ export const productSchema = z.object({
   isNewArrival: z.boolean().default(false),
   isFeatured: z.boolean().default(false),
   badge: z.string().max(50).optional().nullable(),
+  colorOptions: z.array(z.object({
+    productId: z.string().min(1),
+    name: z.string().min(1).max(40),
+    hex: z.string().regex(/^#[0-9a-fA-F]{6}$/),
+  })).max(12).refine((options) => options.length === 0 || options.length >= 2, {
+    message: "A color group needs at least two options.",
+  }).refine((options) => new Set(options.map((option) => option.productId)).size === options.length, {
+    message: "Each product can only appear once in a color group.",
+  }).optional(),
   categoryId: z.string().optional().nullable(),
   tags: z.array(z.string()).default([]),
   seoTitle: z.string().max(200).optional().nullable(),

@@ -1,8 +1,9 @@
-import { CONTACT_EMAIL } from "@/lib/constants";
+import { getStoreSettings } from "@/lib/settings/store-settings";
 
 export const metadata = { title: "Shipping Policy" };
 
-export default function Page() {
+export default async function Page() {
+  const settings = await getStoreSettings();
   return (
     <main className="mx-auto max-w-3xl px-4 py-10 sm:px-6 sm:py-14">
       <p className="section-label mb-2">Delivery, made simple</p>
@@ -10,7 +11,7 @@ export default function Page() {
       <div className="space-y-6 text-sm leading-7 text-[var(--muted)] sm:text-base">
         <section>
           <h2 className="mb-2 text-lg font-semibold text-[var(--charcoal)]">Delivery charges</h2>
-          <p>A flat delivery charge of Rs. 250 applies to orders below Rs. 5,000. Orders of Rs. 5,000 or more qualify for complimentary shipping. The shipping charge or free-shipping offer is shown in your order total at checkout.</p>
+          <p>A flat delivery charge of Rs. {formatAmount(settings.defaultShippingCost)} applies to orders below Rs. {formatAmount(settings.freeShippingThreshold)}. Orders of Rs. {formatAmount(settings.freeShippingThreshold)} or more qualify for complimentary shipping. The shipping charge or free-shipping offer is shown in your order total at checkout.</p>
         </section>
         <section>
           <h2 className="mb-2 text-lg font-semibold text-[var(--charcoal)]">Order delivery</h2>
@@ -20,8 +21,12 @@ export default function Page() {
           <h2 className="mb-2 text-lg font-semibold text-[var(--charcoal)]">Payment</h2>
           <p>Orders are prepaid. Cash on delivery is not available.</p>
         </section>
-        <p>Questions about delivery? Contact us at <a className="link-premium" href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>.</p>
+        <p>Questions about delivery? Contact us at <a className="link-premium" href={`mailto:${settings.storeEmail}`}>{settings.storeEmail}</a>.</p>
       </div>
     </main>
   );
+}
+
+function formatAmount(value: number) {
+  return value.toLocaleString("en-PK", { maximumFractionDigits: 2 });
 }

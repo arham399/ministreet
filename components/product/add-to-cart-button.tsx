@@ -13,6 +13,7 @@ type Props = {
     productId: string;
     slug: string;
     name: string;
+    colorName?: string | null;
     unitPrice: number;
     salePrice?: number | null;
     stockQuantity: number;

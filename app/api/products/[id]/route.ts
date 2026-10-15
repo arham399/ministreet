@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, or } from "drizzle-orm";
 import { getDrizzleClient } from "@/lib/db/drizzle/client";
 import { auditLog, category, product, productImage, productTag } from "@/lib/db/drizzle/schema";
 import { auth } from "@/lib/auth/config";
 import { can } from "@/lib/auth/permissions";
 import { productSchema } from "@/lib/validation/product";
+import { deleteProductImagesFromCloudinary } from "@/lib/storage/uploads";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -38,6 +39,12 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
   const data = parsed.data;
   const { db } = getDrizzleClient();
   const result = await db.transaction(async (tx) => {
+    const [currentProduct] = await tx.select({ id: product.id, colorGroupId: product.colorGroupId })
+      .from(product).where(eq(product.id, id)).limit(1);
+    if (!currentProduct) throw new Error("Product not found");
+    const oldImages = data.imageUrls !== undefined
+      ? await tx.select({ url: productImage.url }).from(productImage).where(eq(productImage.productId, id))
+      : [];
     const update: Partial<typeof product.$inferInsert> = {};
     update.updatedAt = new Date();
     if (data.name != null) update.name = data.name;
@@ -68,14 +75,63 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
         await tx.insert(productTag).values(data.tags.map((name) => ({ productId: id, name: name.toLowerCase() })));
       }
     }
-    if (data.imageUrls?.length) {
+    let removedImageUrls: string[] = [];
+    if (data.imageUrls !== undefined) {
       await tx.delete(productImage).where(eq(productImage.productId, id));
-      await tx.insert(productImage).values(data.imageUrls.map((url, i) => ({
-        productId: id,
-        url,
-        isPrimary: i === 0,
-        sortOrder: i,
-      })));
+      if (data.imageUrls.length) {
+        await tx.insert(productImage).values(data.imageUrls.map((url, i) => ({
+          productId: id,
+          url,
+          isPrimary: i === 0,
+          sortOrder: i,
+        })));
+      }
+      const retained = new Set(data.imageUrls);
+      removedImageUrls = oldImages.map(({ url }) => url).filter((url) => !retained.has(url));
+    }
+    if (data.colorOptions !== undefined) {
+      const groupId = currentProduct.colorGroupId || id;
+      const options = data.colorOptions;
+      if (options.length === 0) {
+        await tx.update(product).set({
+          colorGroupId: null,
+          colorName: null,
+          colorHex: null,
+          updatedAt: new Date(),
+        }).where(or(eq(product.colorGroupId, groupId), eq(product.id, groupId)));
+      } else {
+        if (!options.some((option) => option.productId === groupId)) {
+          throw new Error("Keep the main product in the color group.");
+        }
+        const optionIds = options.map((option) => option.productId);
+        const selectedProducts = await tx.select({ id: product.id, colorGroupId: product.colorGroupId })
+          .from(product)
+          .where(and(
+            inArray(product.id, optionIds),
+            eq(product.isActive, true),
+            isNull(product.archivedAt),
+          ));
+        if (selectedProducts.length !== optionIds.length) {
+          throw new Error("Choose active products for every color option.");
+        }
+        if (selectedProducts.some((item) => item.colorGroupId && item.colorGroupId !== groupId)) {
+          throw new Error("A selected product already belongs to another color group.");
+        }
+        await tx.update(product).set({
+          colorGroupId: null,
+          colorName: null,
+          colorHex: null,
+          updatedAt: new Date(),
+        }).where(or(eq(product.colorGroupId, groupId), eq(product.id, groupId)));
+        for (const option of options) {
+          await tx.update(product).set({
+            colorGroupId: groupId,
+            colorName: option.name.trim(),
+            colorHex: option.hex,
+            updatedAt: new Date(),
+          }).where(eq(product.id, option.productId));
+        }
+      }
     }
     const tags = await tx.select().from(productTag).where(eq(productTag.productId, id));
     await tx.insert(auditLog).values({
@@ -85,12 +141,28 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
       entityType: "Product",
       entityId: id,
     });
-    return { ...savedProduct, tags };
+    return { ...savedProduct, tags, removedImageUrls };
   });
+
+  let warning: string | undefined;
+  if (result.removedImageUrls.length) {
+    const stillUsed = await db.select({ url: productImage.url })
+      .from(productImage)
+      .where(inArray(productImage.url, result.removedImageUrls));
+    const inUse = new Set(stillUsed.map(({ url }) => url));
+    const orphanedUrls = result.removedImageUrls.filter((url) => !inUse.has(url));
+    const storage = await deleteProductImagesFromCloudinary(orphanedUrls);
+    if (storage.failed) {
+      warning = "Product changes were saved, but some removed images could not be deleted from Cloudinary.";
+    } else if (storage.skipped) {
+      warning = "Product changes were saved. Removed images hosted outside this product's Cloudinary folder were left untouched.";
+    }
+  }
 
   return NextResponse.json({
     success: true,
     product: { ...result, tags: result.tags.map((tag) => tag.name) },
+    warning,
   });
 }
 

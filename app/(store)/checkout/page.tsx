@@ -8,7 +8,8 @@ import { useCartStore } from "@/lib/cart/store";
 import { formatPrice } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { DEFAULT_SHIPPING_COST, FREE_SHIPPING_THRESHOLD, PAYMENT_ACCOUNT } from "@/lib/constants";
+import { PAYMENT_ACCOUNT } from "@/lib/constants";
+import { useShippingSettings } from "@/components/providers/shipping-settings-provider";
 import { CartHydration } from "@/components/providers/cart-provider";
 import { PakistanLocationFields } from "@/components/checkout/pakistan-location-fields";
 import { useCartDiscountQuote } from "@/hooks/use-cart-discount-quote";
@@ -22,6 +23,7 @@ const CHECKOUT_STEPS = [
 function CheckoutForm() {
   const router = useRouter();
   const { items, getSubtotal, clearCart } = useCartStore();
+  const { freeShippingThreshold, defaultShippingCost } = useShippingSettings();
   const { quote, error: quoteError, loading: quoteLoading } = useCartDiscountQuote();
   const formRef = useRef<HTMLFormElement>(null);
   const [currentStep, setCurrentStep] = useState(0);
@@ -52,7 +54,7 @@ function CheckoutForm() {
   const subtotal = quote?.subtotal ?? getSubtotal();
   const discount = appliedCoupon?.discountAmount ?? 0;
   const discountedSubtotal = Math.max(0, subtotal - discount);
-  const shipping = discountedSubtotal >= FREE_SHIPPING_THRESHOLD ? 0 : DEFAULT_SHIPPING_COST;
+  const shipping = discountedSubtotal >= freeShippingThreshold ? 0 : defaultShippingCost;
   const total = discountedSubtotal + shipping;
   const cartFingerprint = JSON.stringify(items.map((item) => [item.productId, item.quantity]));
   const previousCartFingerprint = useRef(cartFingerprint);

@@ -9,31 +9,41 @@ export default function ContactPage() {
   const [sent, setSent] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [sentWarning, setSentWarning] = useState<string | null>(null);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setLoading(true);
     setError(null);
     const form = new FormData(e.currentTarget);
-    const res = await fetch("/api/contact", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name: form.get("name"),
-        email: form.get("email"),
-        orderNumber: form.get("orderNumber") || null,
-        subject: form.get("subject"),
-        message: form.get("message"),
-      }),
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      setError(data.error || "Failed to send");
+    try {
+      const res = await fetch("/api/contact", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: form.get("name"),
+          email: form.get("email"),
+          orderNumber: form.get("orderNumber") || null,
+          subject: form.get("subject"),
+          message: form.get("message"),
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        if (data.saved) {
+          setSentWarning(data.error || "Your message was saved, but our team could not be notified by email.");
+          setSent(true);
+        } else {
+          setError(data.error || "We could not send your message. Please try again or email us directly.");
+        }
+        return;
+      }
+      setSent(true);
+    } catch {
+      setError("We could not reach the server. Please try again or email us directly.");
+    } finally {
       setLoading(false);
-      return;
     }
-    setSent(true);
-    setLoading(false);
   }
 
   return (
@@ -43,9 +53,9 @@ export default function ContactPage() {
       <div className="grid md:grid-cols-2 gap-10">
         <div>
           {sent ? (
-            <div className="p-6 rounded-[var(--radius-lg)] bg-[var(--brand-blush)] text-center">
-              <p className="font-medium text-[var(--charcoal)]">Message sent 💗</p>
-              <p className="text-sm text-[var(--muted)] mt-1">We&apos;ll get back to you soon.</p>
+            <div className="p-6 rounded-[var(--radius-lg)] bg-[var(--brand-blush)] text-center" role="status">
+              <p className="font-medium text-[var(--charcoal)]">{sentWarning ? "Your message was received" : "Message sent"}</p>
+              <p className={`mt-1 text-sm ${sentWarning ? "text-[var(--error)]" : "text-[var(--muted)]"}`}>{sentWarning || "We will get back to you soon."}</p>
             </div>
           ) : (
             <form onSubmit={handleSubmit} className="space-y-4">
@@ -75,7 +85,7 @@ export default function ContactPage() {
                   className="flex w-full rounded-[var(--radius-md)] border border-[var(--border)] bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-pink)]"
                 />
               </div>
-              {error && <p className="text-sm text-[var(--error)]">{error}</p>}
+              {error && <p className="text-sm text-[var(--error)]" role="alert">{error}</p>}
               <Button type="submit" disabled={loading}>
                 {loading ? "Sending…" : "Send Message"}
               </Button>

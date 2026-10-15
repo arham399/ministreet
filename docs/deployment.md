@@ -42,6 +42,12 @@ npm run typecheck
 npm test
 ```
 
+Administrators with settings permission can edit the default delivery charge and
+free-shipping minimum in **Admin → Settings**. The saved values are used in the
+storefront announcement bar, cart, checkout, new order totals, and shipping
+policy pages. Already-created orders retain the shipping amount recorded when
+they were placed.
+
 `npm run db:drizzle:schema` re-introspects the configured PostgreSQL database
 and regenerates the Drizzle schema. Review the resulting changes before
 committing. `npm run db:seed` inserts development sample data; do not run it
@@ -49,7 +55,7 @@ against production unless that data is intended.
 
 Keep database credentials private and out of source control. Configure the
 application environment with `AUTH_SECRET`, `NEXT_PUBLIC_APP_URL`, `GMAIL_USER`,
-`GMAIL_APP_PASSWORD`, `ORDER_NOTIFICATION_EMAIL`, `SUPABASE_URL`,
+`GMAIL_APP_PASSWORD`, `ORDER_NOTIFICATION_EMAIL`, `CONTACT_FORM_NOTIFICATION_EMAIL`, `SUPABASE_URL`,
 `SUPABASE_SERVICE_ROLE_KEY`, and `CLOUDINARY_*` as needed. The service-role key
 is server-only and must never use a `NEXT_PUBLIC_` prefix.
 

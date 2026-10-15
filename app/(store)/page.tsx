@@ -5,25 +5,27 @@ import { Button } from "@/components/ui/button";
 import { ProductCard } from "@/components/product/product-card";
 import { CategoryCarousel } from "@/components/home/category-carousel";
 import { PromoBannerCarousel } from "@/components/home/promo-banner-carousel";
-import { getNewArrivals, getBestSellers } from "@/lib/db/queries/products";
+import { CustomerReviewsCarousel } from "@/components/home/customer-reviews-carousel";
+import { getFeaturedProducts, getNewArrivals } from "@/lib/db/queries/products";
 import { CONTACT_EMAIL, CONTACT_PHONE, CONTACT_PHONE_LINK, FACEBOOK_URL, INSTAGRAM_URL } from "@/lib/constants";
 import { getStoreCategories } from "@/lib/db/drizzle/queries/categories";
+import { ProductCollectionRow } from "@/components/home/product-collection-row";
 
 export default async function HomePage() {
   let newArrivals: Awaited<ReturnType<typeof getNewArrivals>>["products"] = [];
-  let bestSellers: Awaited<ReturnType<typeof getBestSellers>>["products"] = [];
+  let featuredProducts: Awaited<ReturnType<typeof getFeaturedProducts>>["products"] = [];
   const categories = await getStoreCategories();
 
   try {
-    const [na, bs] = await Promise.all([getNewArrivals(4), getBestSellers(4)]);
+    const [na, featured] = await Promise.all([getNewArrivals(), getFeaturedProducts()]);
     newArrivals = na.products;
-    bestSellers = bs.products;
+    featuredProducts = featured.products;
   } catch {
     newArrivals = [
-      { id: "1", name: "Pearl Drop Earrings", slug: "pearl-drop-earrings", price: 1599, salePrice: 1299, imageUrl: "", isNewArrival: true, stockQuantity: 25, averageRating: null, categorySlug: undefined },
-      { id: "2", name: "Golden Heart Bracelet", slug: "golden-heart-bracelet", price: 1899, salePrice: 1499, imageUrl: "", isNewArrival: true, stockQuantity: 18, averageRating: null, categorySlug: undefined },
+      { id: "1", name: "Pearl Drop Earrings", slug: "pearl-drop-earrings", colorName: null, colorCount: 0, price: 1599, salePrice: 1299, imageUrl: "", isNewArrival: true, stockQuantity: 25, averageRating: null, categorySlug: undefined },
+      { id: "2", name: "Golden Heart Bracelet", slug: "golden-heart-bracelet", colorName: null, colorCount: 0, price: 1899, salePrice: 1499, imageUrl: "", isNewArrival: true, stockQuantity: 18, averageRating: null, categorySlug: undefined },
     ];
-    bestSellers = newArrivals;
+    featuredProducts = [];
   }
 
   return (
@@ -53,13 +55,13 @@ export default async function HomePage() {
 
       <PromoBannerCarousel />
 
-      <section className="bg-white py-12 sm:py-16">
+      <section className="bg-white py-8 sm:py-11 lg:py-12">
         <div className="mx-auto max-w-7xl px-4 sm:px-8 lg:px-12">
-          <div className="relative mb-7 text-center sm:mb-9">
-            <p className="section-label mb-1.5">Fresh from the boutique</p><h2 className="font-display text-3xl font-medium text-[var(--charcoal)] sm:text-4xl">New arrivals</h2><p className="mt-1 text-xs text-[var(--muted)] sm:text-sm">Meet your next little treasure.</p>
+          <div className="relative mb-5 text-center sm:mb-6">
+            <p className="section-label mb-1">Fresh from the boutique</p><h2 className="font-display text-3xl font-medium text-[var(--charcoal)] sm:text-4xl">New arrivals</h2><p className="mt-1 text-xs text-[var(--muted)] sm:text-sm">Meet your next little treasure.</p>
             <Link href="/new-arrivals" className="link-premium absolute bottom-0 right-0 hidden items-center gap-1 text-xs font-medium text-[var(--brand-pink)] lg:inline-flex">View all <ArrowRight size={13} /></Link>
           </div>
-          <div className="grid grid-cols-2 gap-3 sm:gap-5 lg:grid-cols-4">{newArrivals.map((p) => <ProductCard key={p.id} product={p} />)}</div>
+          <ProductCollectionRow products={newArrivals} />
           <div className="mt-7 text-center sm:hidden"><Button asChild variant="outline" size="sm"><Link href="/new-arrivals">View all new arrivals</Link></Button></div>
         </div>
       </section>
@@ -81,14 +83,25 @@ export default async function HomePage() {
         </div>
       </section>
 
-      <section className="bg-white py-12 sm:py-16">
+      <section className="bg-white py-8 sm:py-11 lg:py-12">
         <div className="mx-auto max-w-7xl px-4 sm:px-8 lg:px-12">
-          <div className="relative mb-7 text-center sm:mb-9">
+          <div className="relative mb-5 text-center sm:mb-6">
             <p className="section-label mb-1.5">The most-loved little things</p><h2 className="font-display text-3xl font-medium text-[var(--charcoal)] sm:text-4xl">Customer favorites</h2>
-            <Link href="/best-sellers" className="link-premium absolute bottom-0 right-0 hidden items-center gap-1 text-xs font-medium text-[var(--brand-pink)] lg:inline-flex">View all <ArrowRight size={13} /></Link>
+            <Link href="/featured" className="link-premium absolute bottom-0 right-0 hidden items-center gap-1 text-xs font-medium text-[var(--brand-pink)] lg:inline-flex">View all <ArrowRight size={13} /></Link>
           </div>
-          <div className="grid grid-cols-2 gap-3 sm:gap-5 lg:grid-cols-4">{bestSellers.map((p) => <ProductCard key={p.id} product={p} />)}</div>
-          <div className="mt-7 text-center sm:hidden"><Button asChild variant="outline" size="sm"><Link href="/best-sellers">See all favorites</Link></Button></div>
+          <ProductCollectionRow products={featuredProducts} />
+          <div className="mt-7 text-center sm:hidden"><Button asChild variant="outline" size="sm"><Link href="/featured">See all featured pieces</Link></Button></div>
+        </div>
+      </section>
+
+      <section className="bg-[var(--brand-cream)] py-5 sm:py-7 lg:py-8" aria-labelledby="customer-reviews-title">
+        <div className="mx-auto max-w-7xl px-4 sm:px-8 lg:px-12">
+          <div className="mb-4 text-center sm:mb-5">
+            <p className="section-label mb-1">Kind words, shared with us</p>
+            <h2 id="customer-reviews-title" className="font-display text-3xl font-medium text-[var(--charcoal)] sm:text-4xl">Little notes from our customers</h2>
+            <p className="mx-auto mt-1.5 max-w-lg text-sm leading-relaxed text-[var(--muted)]">We love hearing how your Mini Street treasures make it to you.</p>
+          </div>
+          <CustomerReviewsCarousel />
         </div>
       </section>
 

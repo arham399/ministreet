@@ -17,6 +17,8 @@ export type ProductCardData = {
   price: number;
   salePrice?: number | null;
   imageUrl?: string | null;
+  colorName?: string | null;
+  colorCount?: number;
   isNewArrival?: boolean;
   stockQuantity?: number;
   averageRating?: number | null;
@@ -42,6 +44,7 @@ export function ProductCard({ product }: { product: ProductCardData }) {
       unitPrice: product.price,
       salePrice: product.salePrice,
       imageUrl: product.imageUrl,
+      colorName: product.colorName,
       stockQuantity: product.stockQuantity ?? 0,
       quantity: 1,
     });
@@ -121,31 +124,28 @@ export function ProductCard({ product }: { product: ProductCardData }) {
           )}
         </div>
 
+        {(product.colorCount ?? 0) > 1 && (
+          <p className="mt-1 text-[10px] text-[var(--muted)] sm:text-xs">
+            Available in {product.colorCount} colors
+          </p>
+        )}
+
         <div className="mt-auto pt-2.5 sm:pt-3">
-          <Button
-            size="sm"
-            className="h-8 w-full rounded-full px-2 text-[10px] tracking-wide sm:h-9 sm:text-xs"
-            disabled={!inStock}
-            onClick={handleAddToCart}
-            aria-label={
-              !inStock
-                ? "Sold out"
-                : added
-                  ? `${product.name} added to cart`
-                  : `Add ${product.name} to cart`
-            }
-          >
-            {!inStock ? (
-              "Sold Out"
-            ) : added ? (
-              <>
-                Added to Cart
-                <Check className="ml-1.5 inline-block h-4 w-4" aria-hidden="true" />
-              </>
-            ) : (
-              "Add to Cart"
-            )}
-          </Button>
+          {(product.colorCount ?? 0) > 1 ? (
+            <Button asChild size="sm" className="h-8 w-full rounded-full px-2 text-[10px] tracking-wide sm:h-9 sm:text-xs">
+              <Link href={`/product/${product.slug}`}>Choose a color</Link>
+            </Button>
+          ) : (
+            <Button
+              size="sm"
+              className="h-8 w-full rounded-full px-2 text-[10px] tracking-wide sm:h-9 sm:text-xs"
+              disabled={!inStock}
+              onClick={handleAddToCart}
+              aria-label={!inStock ? "Sold out" : added ? `${product.name} added to cart` : `Add ${product.name} to cart`}
+            >
+              {!inStock ? "Sold Out" : added ? <>Added to Cart<Check className="ml-1.5 inline-block h-4 w-4" aria-hidden="true" /></> : "Add to Cart"}
+            </Button>
+          )}
         </div>
       </div>
     </article>

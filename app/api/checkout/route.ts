@@ -33,17 +33,22 @@ export async function POST(req: NextRequest) {
     if (!result.success) {
       await deletePaymentProof(proofPath);
       uploadedPath = null;
-      return NextResponse.json(result, { status: 400 });
+      const { status = 400, ...response } = result;
+      return NextResponse.json(response, { status });
     }
     uploadedPath = null;
     return NextResponse.json(result);
   } catch (err) {
     if (uploadedPath) await deletePaymentProof(uploadedPath);
     console.error("[POST /api/checkout]", err);
-    const message = err instanceof Error ? err.message : "Something went wrong. Please try again.";
+    // Keep storage/SQL internals and customer/order data in server logs only.
+    const rawMessage = err instanceof Error ? err.message : "";
+    const message = rawMessage.startsWith("Upload ") || rawMessage.startsWith("The uploaded") || rawMessage.startsWith("The screenshot")
+      ? rawMessage
+      : "We couldn't place your order right now. Please try again shortly. If the issue continues, contact us before submitting again.";
     return NextResponse.json(
       { success: false, error: message },
-      { status: message.startsWith("Upload ") || message.startsWith("The uploaded") || message.startsWith("The screenshot") ? 400 : 500 }
+      { status: message === rawMessage ? 400 : 500 }
     );
   }
 }

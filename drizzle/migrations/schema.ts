@@ -205,6 +205,9 @@ export const product = pgTable("Product", {
 	isNewArrival: boolean().default(false).notNull(),
 	isFeatured: boolean().default(false).notNull(),
 	badge: text(),
+	colorGroupId: text(),
+	colorName: text(),
+	colorHex: text(),
 	seoTitle: text(),
 	seoDescription: text(),
 	ogImageUrl: text(),
@@ -214,6 +217,7 @@ export const product = pgTable("Product", {
 	archivedAt: timestamp({ precision: 3, mode: 'date' }),
 }, (table) => [
 	index("Product_archivedAt_idx").using("btree", table.archivedAt.asc().nullsLast().op("timestamp_ops")),
+	index("Product_colorGroupId_idx").using("btree", table.colorGroupId.asc().nullsLast().op("text_ops")),
 	index("Product_categoryId_idx").using("btree", table.categoryId.asc().nullsLast().op("text_ops")),
 	index("Product_isActive_isFeatured_idx").using("btree", table.isActive.asc().nullsLast().op("bool_ops"), table.isFeatured.asc().nullsLast().op("bool_ops")),
 	index("Product_isActive_isNewArrival_idx").using("btree", table.isActive.asc().nullsLast().op("bool_ops"), table.isNewArrival.asc().nullsLast().op("bool_ops")),

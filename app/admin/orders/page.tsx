@@ -63,7 +63,7 @@ export default async function AdminOrdersPage({ searchParams }: { searchParams: 
         </div>
       ) : (
         <div className="rounded-[var(--radius-md)] border border-[var(--border)] bg-white overflow-x-auto shadow-soft">
-          <table className="admin-data-table w-full text-sm">
+          <table className="admin-data-table admin-orders-table w-full text-sm">
             <thead>
               <tr className="border-b border-[var(--border)] text-left text-[var(--muted)]">
                 <th className="px-4 py-3 font-medium">Order</th>

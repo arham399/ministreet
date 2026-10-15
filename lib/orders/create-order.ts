@@ -2,7 +2,7 @@
  * Transactional order creation — server only.
  * Never trusts client prices. Recalculates everything from DB.
  */
-import { and, count, eq, gte, inArray, isNull, lte, or, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, isNull, lte, or, sql } from "drizzle-orm";
 import { getDrizzleClient } from "@/lib/db/drizzle/client";
 import {
   coupon as couponTable,
@@ -23,10 +23,11 @@ import { TRACKING_STATUS_COPY } from "@/lib/constants";
 import { validateCouponForCart } from "@/lib/coupons/validate-coupon";
 import { applyAutomaticDiscounts } from "@/lib/discounts/apply-automatic-discounts";
 import { getActiveAutomaticDiscounts } from "@/lib/discounts/queries";
+import { getStoreSettings } from "@/lib/settings/store-settings";
 
 export type CreateOrderResult =
   | { success: true; orderId: string; orderNumber: string; trackingId: string; total: number }
-  | { success: false; error: string };
+  | { success: false; error: string; status?: number };
 
 export async function createOrder(input: CheckoutInput, paymentProofPath: string): Promise<CreateOrderResult> {
   try {
@@ -134,22 +135,34 @@ export async function createOrder(input: CheckoutInput, paymentProofPath: string
       couponCampaignId = coupon.campaignId;
     }
 
+    const storeSettings = await getStoreSettings();
     const totals = calculateOrderTotals({
       lines,
       couponDiscount,
+      freeShippingThreshold: storeSettings.freeShippingThreshold,
+      defaultShippingCost: storeSettings.defaultShippingCost,
     });
 
-    // Generate sequential-ish order number
     const year = new Date().getFullYear();
-    const [{ value: orderCount }] = await db
-      .select({ value: count() })
-      .from(order)
-      .where(gte(order.createdAt, new Date(`${year}-01-01`)));
-    const orderNumber = generateOrderNumber(orderCount + 1, year);
-    const trackingId = orderNumber; // same for simplicity; can diverge later
-    const invoiceNumber = generateInvoiceNumber(orderCount + 1, year);
+    let orderNumber = "";
+    let trackingId = "";
+    let invoiceNumber = "";
 
     const createdOrder = await db.transaction(async (tx) => {
+      // Order rows can be deleted, so COUNT(*) + 1 can reuse an existing number.
+      // Serialize sequence allocation across app instances and derive each next
+      // number from the highest number that is actually in use.
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(481516, ${year})`);
+      const [{ value: lastOrderSequence }] = await tx.select({
+        value: sql<number>`COALESCE(MAX(NULLIF(substring(${order.orderNumber} FROM ${`^MS-${year}-([0-9]+)$`}), '')::integer), 0)`,
+      }).from(order);
+      const [{ value: lastInvoiceSequence }] = await tx.select({
+        value: sql<number>`COALESCE(MAX(NULLIF(substring(${invoice.invoiceNumber} FROM ${`^INV-${year}-([0-9]+)$`}), '')::integer), 0)`,
+      }).from(invoice);
+      orderNumber = generateOrderNumber(Number(lastOrderSequence) + 1, year);
+      trackingId = orderNumber;
+      invoiceNumber = generateInvoiceNumber(Number(lastInvoiceSequence) + 1, year);
+
       // Re-check stock inside transaction
       for (const item of input.items) {
         const [p] = await tx.select().from(product).where(eq(product.id, item.productId)).limit(1);
@@ -244,7 +257,7 @@ export async function createOrder(input: CheckoutInput, paymentProofPath: string
           return {
             orderId: created.id,
             productId: p.id,
-            productNameSnapshot: p.name,
+            productNameSnapshot: p.colorName ? `${p.name} · ${p.colorName}` : p.name,
             skuSnapshot: p.sku,
             unitPrice: String(unit),
             discountAmount: "0",
@@ -301,7 +314,7 @@ export async function createOrder(input: CheckoutInput, paymentProofPath: string
             ? Number(product.salePrice)
             : Number(product.price);
         return {
-          name: product.name,
+          name: product.colorName ? `${product.name} · ${product.colorName}` : product.name,
           quantity: item.quantity,
           lineTotal: formatRupees(unitPrice * item.quantity),
         };
@@ -384,8 +397,16 @@ export async function createOrder(input: CheckoutInput, paymentProofPath: string
     };
   } catch (err) {
     console.error("[createOrder]", err);
-    const message =
-      err instanceof Error ? err.message : "Something went wrong placing your order.";
-    return { success: false, error: message };
+    const rawMessage = err instanceof Error ? err.message : "";
+    // Drizzle includes the full SQL statement and bound values in this error.
+    // Those can contain customer details, so never send it back to checkout.
+    const message = rawMessage.startsWith("Failed query:")
+      ? "We couldn't save your order right now. Please try again shortly. If the issue continues, contact us before submitting again."
+      : rawMessage || "Something went wrong placing your order.";
+    return {
+      success: false,
+      error: message,
+      ...(rawMessage.startsWith("Failed query:") ? { status: 500 } : {}),
+    };
   }
 }

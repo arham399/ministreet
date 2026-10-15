@@ -38,12 +38,19 @@ export function calculateOrderTotals(params: {
   lines: CartLine[];
   couponDiscount?: number;
   shippingOverride?: number;
+  freeShippingThreshold?: number;
+  defaultShippingCost?: number;
 }) {
   const subtotal = calculateSubtotal(params.lines);
   const discountAmount = Math.min(params.couponDiscount ?? 0, subtotal);
   const afterDiscount = subtotal - discountAmount;
   const shippingAmount =
-    params.shippingOverride ?? calculateShipping(afterDiscount);
+    params.shippingOverride ??
+    calculateShipping(
+      afterDiscount,
+      params.freeShippingThreshold,
+      params.defaultShippingCost,
+    );
   const total = Math.max(0, afterDiscount + shippingAmount);
 
   return {

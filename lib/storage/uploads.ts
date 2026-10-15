@@ -91,11 +91,11 @@ export async function uploadImage(
   const apiKey = process.env.CLOUDINARY_API_KEY!;
   const apiSecret = process.env.CLOUDINARY_API_SECRET!;
 
+  const crypto = await import("crypto");
   const timestamp = Math.floor(Date.now() / 1000);
-  const publicId = `${folder}/${Date.now()}-${filename.replace(/[^a-zA-Z0-9._-]/g, "")}`;
+  const publicId = `${folder}/${crypto.randomUUID()}-${filename.replace(/[^a-zA-Z0-9._-]/g, "")}`;
 
   // Signature: sha1 of sorted params + api_secret
-  const crypto = await import("crypto");
   const toSign = `folder=${folder}&public_id=${publicId}&timestamp=${timestamp}${apiSecret}`;
   const signature = crypto.createHash("sha1").update(toSign).digest("hex");
 

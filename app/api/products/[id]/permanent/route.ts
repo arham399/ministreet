@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { auth } from "@/lib/auth/config";
 import { can } from "@/lib/auth/permissions";
 import { getDrizzleClient } from "@/lib/db/drizzle/client";
@@ -65,11 +65,18 @@ export async function DELETE(_request: Request, ctx: Ctx) {
     }, { status: 409 });
   }
 
-  const storage = await deleteProductImagesFromCloudinary(result.imageUrls);
+  const stillUsed = result.imageUrls.length
+    ? await db.select({ url: productImage.url })
+      .from(productImage)
+      .where(inArray(productImage.url, result.imageUrls))
+    : [];
+  const inUse = new Set(stillUsed.map(({ url }) => url));
+  const orphanedUrls = result.imageUrls.filter((url) => !inUse.has(url));
+  const storage = await deleteProductImagesFromCloudinary(orphanedUrls);
   const warning = storage.failed
     ? "The product was deleted, but some uploaded images could not be removed from Cloudinary."
-    : storage.skipped
-      ? "The product was deleted. Images hosted outside this product's Cloudinary folder were left untouched."
+    : storage.skipped || inUse.size
+      ? "The product was deleted. Images still used by other products or hosted outside this product's Cloudinary folder were left untouched."
       : undefined;
   return NextResponse.json({ success: true, warning });
 }

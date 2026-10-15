@@ -157,11 +157,11 @@ export default async function CategoryPage({ params, searchParams }: Props) {
 
   return (
     <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
-      <div className="mb-8 rounded-[var(--radius-xl)] bg-gradient-to-r from-[var(--brand-blush)] via-[#fff6f8] to-[var(--brand-cream)] px-6 py-12 text-center sm:py-14">
+      <div className="mb-8 rounded-[var(--radius-xl)] bg-gradient-to-r from-[var(--brand-blush)] via-[#fff6f8] to-[var(--brand-cream)] px-6 py-10 text-center sm:py-12">
         <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.24em] text-[var(--brand-pink)]">
           Mini Street collection
         </p>
-        <h1 className="font-display text-3xl font-semibold text-[var(--charcoal)] sm:text-4xl">{cat.name}</h1>
+        <h1 className="font-display text-4xl font-semibold text-[var(--charcoal)] sm:text-5xl">{cat.name}</h1>
         <p className="mt-2 text-sm text-[var(--muted)]">Delicate pieces for every little moment</p>
       </div>
       <nav aria-label="Breadcrumb" className="mb-7 text-sm text-[var(--muted)]">

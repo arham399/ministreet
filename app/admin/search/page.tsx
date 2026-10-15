@@ -131,7 +131,7 @@ export default async function AdminSearchPage({ searchParams }: { searchParams: 
                 <ul className="divide-y divide-[var(--border)] rounded-xl border border-[var(--border)] bg-white shadow-soft">
                   {results.filter((result) => result.section === section).map((result, index) => (
                     <li key={`${result.title}-${index}`}>
-                      <Link href={result.href} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 hover:bg-[var(--brand-cream)]">
+                      <Link href={result.href} className="admin-search-result flex flex-wrap items-center justify-between gap-3 px-4 py-3 hover:bg-[var(--brand-cream)]">
                         <span className="min-w-0">
                           <span className="block truncate text-sm font-medium text-[var(--charcoal)]">{result.title}</span>
                           <span className="mt-0.5 block truncate text-xs text-[var(--muted)]">{result.detail}</span>

@@ -70,6 +70,73 @@
 
 * { border-color: var(--border); }
 
+.customer-reviews-track {
+  display: flex;
+  gap: .75rem;
+  overflow-x: auto;
+  padding: 1px 1px .5rem;
+  scroll-behavior: smooth;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+  overscroll-behavior-inline: contain;
+}
+.customer-reviews-track::-webkit-scrollbar { display: none; }
+.customer-reviews-slide { flex: 0 0 88%; min-height: 150px; scroll-snap-align: start; }
+.customer-reviews-indicator { position: relative; width: 78px; height: 4px; overflow: hidden; border-radius: 999px; background: var(--border); }
+.customer-reviews-indicator > span { position: absolute; top: 0; bottom: 0; border-radius: inherit; background: var(--brand-pink); transition: left .25s ease, width .25s ease; }
+.product-collection-track {
+  display: flex;
+  gap: .75rem;
+  overflow-x: auto;
+  padding: 1px 1px .5rem;
+  scroll-behavior: smooth;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+  overscroll-behavior-inline: contain;
+}
+.product-collection-track::-webkit-scrollbar { display: none; }
+.product-collection-slide { flex: 0 0 78%; scroll-snap-align: start; }
+.product-collection-slide > article { height: 100%; }
+@media (min-width: 640px) {
+  .product-collection-track { gap: 1rem; }
+  .product-collection-slide { flex-basis: calc((100% - 1rem) / 2); }
+}
+@media (min-width: 1024px) {
+  .product-collection-slide { flex-basis: calc((100% - 3rem) / 4); }
+}
+@media (min-width: 640px) {
+  .customer-reviews-track { gap: 1rem; }
+  .customer-reviews-slide { flex-basis: calc((100% - 1rem) / 2); }
+}
+@media (min-width: 1024px) {
+  .customer-reviews-slide { flex-basis: calc((100% - 2rem) / 3); }
+}
+
+.related-products-track {
+  display: flex;
+  gap: .75rem;
+  overflow-x: auto;
+  padding: 1px 1px .4rem;
+  scroll-behavior: smooth;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: thin;
+  scrollbar-color: var(--brand-pink-soft) transparent;
+  overscroll-behavior-inline: contain;
+}
+.related-products-slide { flex: 0 0 68%; max-width: 230px; scroll-snap-align: start; }
+.related-products-slide .product-card-media { aspect-ratio: 1.3; }
+.related-products-slide .product-card-media img { padding: .5rem; }
+.related-products-slide > article > div:last-child { padding: .65rem; }
+.related-products-slide > article > div:last-child button { height: 2rem; min-height: 2rem; }
+.related-products-slide > article > div:first-child > button { padding: .45rem; }
+@media (min-width: 640px) {
+  .related-products-track { gap: 1rem; }
+  .related-products-slide { flex-basis: 30%; }
+}
+@media (min-width: 1024px) {
+  .related-products-slide { flex-basis: 20%; }
+}
+
 html { scroll-behavior: smooth; }
 body { overflow-x: clip; }
 
@@ -89,8 +156,7 @@ body {
   word-break: normal;
 }
 
-/* Keep admin data tables readable on phones: scroll the table inside its card
-   instead of forcing columns to collapse into one character per line. */
+/* Keep admin tables readable at normal widths; narrow screens get labeled cards below. */
 .admin-main :where(table) {
   min-width: 42rem;
 }
@@ -232,6 +298,13 @@ body {
 }
 .animate-fade-up {
   animation: fade-up 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.newsletter-caret {
+  animation: newsletter-caret-blink 0.9s step-end infinite;
+}
+@keyframes newsletter-caret-blink {
+  50% { opacity: 0; }
 }
 
 /* Section title accent */
@@ -575,11 +648,91 @@ body {
 /* On narrow admin screens, render data rows as compact, labeled records.
    Desktop keeps its full table; mobile no longer has to scroll a 700px grid. */
 @media (max-width: 767px) {
+  .admin-shell { min-height: 100dvh; }
+  .admin-main { padding: 1rem .875rem 2rem; }
+  .admin-main :where(h1) { font-size: 1.45rem; line-height: 1.2; }
+  .admin-main :where(h2) { line-height: 1.3; }
+  .admin-main :where(.admin-page-heading) { margin-bottom: 1.15rem; }
+  .admin-main :where(.admin-page-heading > [data-slot="button"]) { min-height: 2.75rem; }
+  .admin-main :where(.admin-stat-grid) { gap: .65rem; }
+  .admin-main :where(.admin-stat-grid > *) { border-radius: 1rem; padding: .9rem; }
+  .admin-main :where(.admin-chart-card) { overflow: hidden; border-radius: 1rem; }
+  .admin-main :where(.admin-card-row) { gap: .75rem; border-radius: 1rem; padding: 1rem; }
+  .admin-main :where(.admin-form-grid) { gap: 1rem; }
+  .admin-main :where(form:not(.admin-search-form)) { min-width: 0; }
+  .admin-main :where(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), select, textarea) {
+    min-height: 2.75rem;
+    border-radius: .75rem;
+    font-size: 16px;
+  }
+  .admin-main :where(textarea) { min-height: 7rem; }
+  .admin-main :where(input[type="checkbox"], input[type="radio"]) { flex: none; }
+  .admin-main :where(button, [data-slot="button"]) { touch-action: manipulation; }
+  .admin-main :where(.admin-search-form) { margin-bottom: 1rem; }
+  .admin-main :where(.admin-search-form input) { height: 2.75rem; border-radius: .8rem; }
+  .admin-main :where(.admin-search-form button) { min-height: 2.75rem; padding-inline: 1rem; }
+  .admin-topbar {
+    min-height: 0;
+    flex-wrap: wrap;
+    gap: .55rem;
+    padding: .55rem .75rem .7rem;
+  }
+  .admin-topbar > button[aria-label*="admin menu"] { order: 1; }
+  .admin-topbar > a[aria-label="Mini Street admin home"] { order: 2; }
+  .admin-topbar > .admin-mobile-logout { order: 3; }
+  .admin-topbar > .admin-storefront-link { order: 4; margin-left: auto; }
+  .admin-topbar > .admin-global-search { order: 5; }
+  .admin-mobile-logout button {
+    width: auto;
+    min-height: 2.5rem;
+    justify-content: center;
+    border: 1px solid #eee3e9;
+    border-radius: .8rem;
+    padding: .55rem .75rem;
+    color: #6f5d69;
+    font-size: .75rem;
+  }
+  .admin-global-search {
+    order: 4;
+    flex: 0 0 100%;
+    width: 100%;
+    max-width: none;
+    margin: 0;
+  }
+  .admin-global-search input {
+    height: 2.75rem;
+    border-radius: .85rem;
+    background: #fffafd;
+    font-size: .875rem;
+  }
+  .admin-search-result { align-items: flex-start; flex-direction: column; gap: .45rem; }
+  .admin-search-result > span:first-child { width: 100%; }
+  .admin-search-result > span:first-child > :last-child { white-space: normal; overflow-wrap: anywhere; }
+  .admin-search-result > span:last-child { align-self: flex-start; }
+  .admin-main :where(nav[aria-label="Table pagination"]) {
+    align-items: flex-start;
+    padding: .85rem .25rem .25rem;
+  }
+  .admin-main :where(nav[aria-label="Table pagination"] > div) {
+    width: 100%;
+    justify-content: space-between;
+    gap: .35rem;
+  }
+  .admin-main :where(nav[aria-label="Table pagination"] a),
+  .admin-main :where(nav[aria-label="Table pagination"] span) {
+    white-space: nowrap;
+  }
+  .admin-main :where(div:has(> table.admin-data-table)) {
+    overflow: visible;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+  }
   .admin-main :where(table.admin-data-table) {
     width: 100%;
     min-width: 0 !important;
     border-collapse: separate;
-    border-spacing: 0 .65rem;
+    border-spacing: 0 .7rem;
   }
   .admin-main :where(table.admin-data-table thead) { display: none; }
   .admin-main :where(table.admin-data-table tbody) { display: block; width: 100%; }
@@ -587,44 +740,45 @@ body {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     width: 100%;
-    margin: 0 0 .7rem;
+    margin: 0 0 .2rem;
     overflow: hidden;
-    border: 1px solid #eee4ea;
-    border-radius: 15px;
+    border: 1px solid #eee3e9;
+    border-radius: 17px;
     background: #fff;
-    box-shadow: 0 5px 18px rgba(72,40,59,.045);
+    box-shadow: 0 8px 24px rgba(72,40,59,.055);
   }
-  .admin-main :where(table.admin-data-table tbody tr:last-child) { margin-bottom: .15rem; }
+  .admin-main :where(table.admin-data-table tbody tr:last-child) { margin-bottom: .25rem; }
   .admin-main :where(table.admin-data-table td[data-label]) {
     display: flex;
     width: 100%;
     min-width: 0;
-    flex-direction: column;
-    align-items: flex-start;
-    justify-content: flex-start;
-    gap: .25rem;
-    padding: .68rem .8rem;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: .65rem;
+    padding: .72rem .85rem;
     border: 0;
     border-bottom: 1px solid #f3edf0;
-    text-align: left;
+    text-align: right;
     white-space: normal;
-    overflow-wrap: anywhere;
+    overflow-wrap: break-word;
     font-size: .82rem;
-    line-height: 1.35;
+    line-height: 1.4;
   }
   .admin-main :where(table.admin-data-table td[data-label]::before) {
     content: attr(data-label);
     flex: none;
-    color: #8a7b85;
-    font-size: .61rem;
+    color: #8b7c86;
+    font-size: .62rem;
     font-weight: 700;
-    letter-spacing: .055em;
-    line-height: 1.45;
+    letter-spacing: .07em;
+    line-height: 1.35;
     text-align: left;
     text-transform: uppercase;
     overflow-wrap: normal;
   }
-  .admin-main :where(table.admin-data-table td[data-label]:last-child) { border-bottom: 0; }
+  .admin-main :where(table.admin-data-table td[data-label]:last-child),
+  .admin-main :where(table.admin-data-table td[data-label]:nth-last-child(2)) { border-bottom: 0; }
   .admin-main :where(table.admin-data-table td[colspan]) {
     display: block;
     grid-column: 1 / -1;
@@ -634,25 +788,57 @@ body {
     white-space: normal;
   }
   .admin-main :where(table.admin-data-table td[colspan]::before) { display: none; }
-  .admin-main :where(table.admin-data-table td[data-label="Actions"]) { grid-column: 1 / -1; display: block; text-align: left; }
-  .admin-main :where(table.admin-data-table td[data-label="Actions"]::before) { display: block; margin-bottom: .5rem; }
-  .admin-main :where(table.admin-products-table td[data-label="Product"]) { grid-column: 1 / -1; }
-  .admin-main :where(table.admin-data-table td[data-label="Actions"] button) { width: 100%; min-height: 2.5rem; }
-  .admin-main :where(table.admin-data-table .admin-row-actions) { align-items: stretch; flex-direction: column; gap: .45rem; }
-  .admin-main :where(table.admin-data-table .admin-row-actions > a) {
-    display: inline-flex;
+  .admin-main :where(table.admin-data-table td[data-label="Actions"]) {
+    grid-column: 1 / -1;
+    display: block;
+    padding: .65rem .8rem .8rem;
+    border-top: 1px solid #f3edf0;
+    text-align: left;
+  }
+  .admin-main :where(table.admin-data-table td[data-label="Actions"]::before) { display: none; }
+  .admin-main :where(table.admin-orders-table td[data-label="Order"]) {
+    grid-column: 1 / -1;
+    background: linear-gradient(100deg, #fff7fb, #fff);
+    color: #342a32;
+    font-weight: 650;
+  }
+  .admin-main :where(table.admin-orders-table td[data-label="Order"]::before) { color: #c2186b; }
+  .admin-main :where(table.admin-orders-table td[data-label="Actions"] > a) {
+    display: flex;
     min-height: 2.5rem;
     align-items: center;
     justify-content: center;
-    border: 1px solid #eee4ea;
-    border-radius: 9px;
-    padding: .55rem .75rem;
+    border-radius: .7rem;
+    background: #fdf2f8;
+    color: #c2186b;
+    font-size: .8rem;
+    font-weight: 600;
     text-decoration: none;
   }
-  .admin-main :where(table.admin-data-table td[data-label="Actions"] > div) { min-width: 0; width: 100%; flex-direction: column; align-items: stretch; }
-  .admin-main :where(table.admin-data-table td[data-label="Actions"] > div > a) { display: inline-flex; min-height: 2.5rem; align-items: center; justify-content: center; border: 1px solid #eee4ea; border-radius: 9px; }
+  .admin-main :where(table.admin-products-table td[data-label="Product"]) { grid-column: 1 / -1; }
+  .admin-main :where(table.admin-data-table td[data-label="Actions"] button) { min-height: 2.45rem; }
+  .admin-main :where(table.admin-products-table .admin-row-actions) {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: .45rem;
+  }
+  .admin-main :where(table.admin-data-table .admin-row-actions > a) {
+    display: inline-flex;
+    min-height: 2.45rem;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid #eee4ea;
+    border-radius: 10px;
+    padding: .5rem .45rem;
+    color: #c2186b;
+    font-size: .75rem;
+    text-decoration: none;
+  }
+  .admin-main :where(table.admin-data-table td[data-label="Actions"] > div) { min-width: 0; width: 100%; }
+  .admin-main :where(table.admin-data-table td[data-label="Actions"] > div > a) { display: inline-flex; min-height: 2.45rem; align-items: center; justify-content: center; border: 1px solid #eee4ea; border-radius: 10px; }
   .admin-main :where(table.admin-data-table td[data-label="Actions"] .min-w-max) { min-width: 0; }
   .admin-main :where(table.admin-data-table td[data-label="Actions"] a + a) { margin-left: 0; }
+  .admin-main :where(table.admin-products-table .admin-row-actions > :last-child:nth-child(odd)) { grid-column: 1 / -1; }
   .admin-main :where(.admin-product-toolbar) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .admin-main :where(.admin-product-toolbar > :first-child) { grid-column: 1 / -1; }
   .admin-main :where(.admin-search-form) { grid-template-columns: minmax(0, 1fr) auto; }

@@ -1,8 +1,9 @@
-import { CONTACT_EMAIL } from "@/lib/constants";
+import { getStoreSettings } from "@/lib/settings/store-settings";
 
 export const metadata = { title: "Terms & Conditions" };
 
-export default function Page() {
+export default async function Page() {
+  const settings = await getStoreSettings();
   return (
     <main className="mx-auto max-w-3xl px-4 py-10 sm:px-6 sm:py-14">
       <p className="section-label mb-2">Please read before ordering</p>
@@ -22,14 +23,18 @@ export default function Page() {
 
         <section>
           <h2 className="mb-2 text-lg font-semibold text-[var(--charcoal)]">Shipping and returns</h2>
-          <p>A flat Rs. 250 delivery charge applies to orders below Rs. 5,000; orders of Rs. 5,000 or more qualify for complimentary shipping. Delivery timelines can vary by destination and courier. Shipping charges are non-refundable. If an item arrives damaged or broken, report it within 48 hours of delivery with clear photos or an unboxing video. Approved returns must be sent in original packaging; refunds are issued after we receive and verify the returned parcel, with 2–5 working days allowed for processing. Items damaged through misuse are not eligible for a refund. See our <a href="/return-policy" className="link-premium">Returns &amp; Refunds</a> and <a href="/shipping-policy" className="link-premium">Shipping Policy</a> for details.</p>
+          <p>A flat Rs. {formatAmount(settings.defaultShippingCost)} delivery charge applies to orders below Rs. {formatAmount(settings.freeShippingThreshold)}; orders of Rs. {formatAmount(settings.freeShippingThreshold)} or more qualify for complimentary shipping. Delivery timelines can vary by destination and courier. Shipping charges are non-refundable. If an item arrives damaged or broken, report it within 48 hours of delivery with clear photos or an unboxing video. Approved returns must be sent in original packaging; refunds are issued after we receive and verify the returned parcel, with 2–5 working days allowed for processing. Items damaged through misuse are not eligible for a refund. See our <a href="/return-policy" className="link-premium">Returns &amp; Refunds</a> and <a href="/shipping-policy" className="link-premium">Shipping Policy</a> for details.</p>
         </section>
 
         <section>
           <h2 className="mb-2 text-lg font-semibold text-[var(--charcoal)]">Contact</h2>
-          <p>For questions about these terms or an order, email <a className="link-premium" href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>.</p>
+          <p>For questions about these terms or an order, email <a className="link-premium" href={`mailto:${settings.storeEmail}`}>{settings.storeEmail}</a>.</p>
         </section>
       </div>
     </main>
   );
+}
+
+function formatAmount(value: number) {
+  return value.toLocaleString("en-PK", { maximumFractionDigits: 2 });
 }

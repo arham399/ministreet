@@ -5,6 +5,7 @@ import { signOut } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { KeyRound } from "lucide-react";
 
 export default function AccountCredentialsForm({
   currentEmail,
@@ -55,12 +56,18 @@ export default function AccountCredentialsForm({
   }
 
   return (
-    <section className="rounded-[var(--radius-md)] border border-[var(--border)] bg-white p-5 shadow-soft">
-      <h2 className="font-semibold text-sm mb-1">Admin sign-in</h2>
-      <p className="text-xs text-[var(--muted)] mb-4">
+    <section className="overflow-hidden rounded-3xl border border-[#efe3ea] bg-white shadow-[0_14px_40px_rgba(72,40,59,.05)]">
+      <div className="flex items-start gap-3 border-b border-[#f2e9ee] bg-gradient-to-br from-white to-[#fbf7fa] px-5 py-5 sm:px-7">
+        <span className="grid size-10 shrink-0 place-items-center rounded-2xl bg-[#f2effa] text-[#8565a4]"><KeyRound size={19} /></span>
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-[.18em] text-[#a17d91]">Account security</p>
+          <h2 className="mt-1 font-display text-xl font-semibold text-[#342a32]">Admin sign-in</h2>
+          <p className="mt-1 text-sm leading-6 text-[#827680]">
         Change the email used to sign in or set a new password. Your current password is required.
-      </p>
-      <form onSubmit={handleSubmit} className="space-y-4">
+          </p>
+        </div>
+      </div>
+      <form onSubmit={handleSubmit} className="space-y-4 px-5 py-5 sm:px-7 sm:py-6">
         <div>
           <label htmlFor="account-email" className="mb-1.5 block text-sm font-medium">Sign-in email</label>
           <Input
