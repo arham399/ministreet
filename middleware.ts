@@ -11,6 +11,7 @@ export async function middleware(req: NextRequest) {
     const token = await getToken({
       req,
       secret: process.env.AUTH_SECRET,
+      secureCookie: req.nextUrl.protocol === "https:",
     });
     if (!token || !ADMIN_ROLES.includes(token.role as string)) {
       const login = new URL("/admin/login", req.url);
@@ -23,6 +24,7 @@ export async function middleware(req: NextRequest) {
     const token = await getToken({
       req,
       secret: process.env.AUTH_SECRET,
+      secureCookie: req.nextUrl.protocol === "https:",
     });
     if (!token) {
       const login = new URL("/login", req.url);
