@@ -93,7 +93,13 @@ export async function uploadImage(
 
   const crypto = await import("crypto");
   const timestamp = Math.floor(Date.now() / 1000);
-  const publicId = `${folder}/${crypto.randomUUID()}-${filename.replace(/[^a-zA-Z0-9._-]/g, "")}`;
+  const safeFilename = filename
+    .replace(/\.[^.]+$/, "")
+    .replace(/[^a-zA-Z0-9_-]/g, "")
+    .slice(0, 80) || "product-image";
+  // Cloudinary combines `folder` with `public_id`; keep the public ID itself
+  // folder-free and extension-free to avoid duplicated paths and extensions.
+  const publicId = `${crypto.randomUUID()}-${safeFilename}`;
 
   // Signature: sha1 of sorted params + api_secret
   const toSign = `folder=${folder}&public_id=${publicId}&timestamp=${timestamp}${apiSecret}`;

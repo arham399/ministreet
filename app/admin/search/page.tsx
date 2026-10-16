@@ -23,12 +23,17 @@ export const metadata = { title: "Admin search | Mini Street" };
 
 type SearchResult = { section: string; title: string; detail: string; href: string };
 
-export default async function AdminSearchPage({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
+const PAGE_SIZE = 20;
+
+export default async function AdminSearchPage({ searchParams }: { searchParams: Promise<{ q?: string; page?: string }> }) {
   const session = await auth();
   if (!session?.user) redirect("/admin/login");
 
   const params = await searchParams;
   const query = params.q?.trim().slice(0, 100) ?? "";
+  const requestedPage = Number.parseInt(params.page ?? "1", 10);
+  const page = Number.isSafeInteger(requestedPage) && requestedPage > 0 ? requestedPage : 1;
+  const searchLimit = page * PAGE_SIZE + 1;
   const pattern = `%${query}%`;
   let results: SearchResult[] = [];
   let searchFailed = false;
@@ -40,66 +45,66 @@ export default async function AdminSearchPage({ searchParams }: { searchParams: 
 
       if (can(session.user.role, "products:read")) {
         searches.push(db.select({ id: product.id, name: product.name, sku: product.sku })
-          .from(product).where(or(ilike(product.name, pattern), ilike(product.sku, pattern))).limit(8)
+          .from(product).where(or(ilike(product.name, pattern), ilike(product.sku, pattern))).limit(searchLimit)
           .then((rows) => rows.map((row) => ({ section: "Products", title: row.name, detail: `SKU ${row.sku}`, href: `/admin/products?q=${encodeURIComponent(row.sku)}` }))));
         searches.push(db.select({ id: category.id, name: category.name, slug: category.slug })
-          .from(category).where(or(ilike(category.name, pattern), ilike(category.slug, pattern))).limit(8)
+          .from(category).where(or(ilike(category.name, pattern), ilike(category.slug, pattern))).limit(searchLimit)
           .then((rows) => rows.map((row) => ({ section: "Categories", title: row.name, detail: row.slug, href: "/admin/categories" }))));
         searches.push(db.select({ id: inventoryMovement.id, name: product.name, sku: product.sku, reason: inventoryMovement.reason })
           .from(inventoryMovement).innerJoin(product, eq(inventoryMovement.productId, product.id))
-          .where(or(ilike(product.name, pattern), ilike(product.sku, pattern), ilike(inventoryMovement.reason, pattern))).limit(8)
+          .where(or(ilike(product.name, pattern), ilike(product.sku, pattern), ilike(inventoryMovement.reason, pattern))).limit(searchLimit)
           .then((rows) => rows.map((row) => ({ section: "Inventory", title: row.name, detail: [row.sku, row.reason].filter(Boolean).join(" · "), href: "/admin/inventory" }))));
       }
 
       if (can(session.user.role, "orders:read")) {
         searches.push(db.select({ id: order.id, orderNumber: order.orderNumber, customerName: order.customerName, customerEmail: order.customerEmail, status: order.status })
-          .from(order).where(or(ilike(order.orderNumber, pattern), ilike(order.customerName, pattern), ilike(order.customerEmail, pattern), ilike(order.customerPhone, pattern))).limit(8)
+          .from(order).where(or(ilike(order.orderNumber, pattern), ilike(order.customerName, pattern), ilike(order.customerEmail, pattern), ilike(order.customerPhone, pattern))).limit(searchLimit)
           .then((rows) => rows.map((row) => ({ section: "Orders", title: row.orderNumber, detail: `${row.customerName} · ${row.customerEmail} · ${row.status}`, href: `/admin/orders/${row.id}` }))));
         searches.push(db.select({ id: invoice.id, invoiceNumber: invoice.invoiceNumber, orderNumber: order.orderNumber, customerName: order.customerName })
           .from(invoice).innerJoin(order, eq(invoice.orderId, order.id))
-          .where(or(ilike(invoice.invoiceNumber, pattern), ilike(order.orderNumber, pattern), ilike(order.customerName, pattern))).limit(8)
+          .where(or(ilike(invoice.invoiceNumber, pattern), ilike(order.orderNumber, pattern), ilike(order.customerName, pattern))).limit(searchLimit)
           .then((rows) => rows.map((row) => ({ section: "Invoices", title: row.invoiceNumber, detail: `Order ${row.orderNumber} · ${row.customerName}`, href: "/admin/invoices" }))));
       }
 
       if (can(session.user.role, "customers:read")) {
         searches.push(db.select({ id: user.id, name: user.name, email: user.email, phone: user.phone })
-          .from(user).where(and(eq(user.role, "CUSTOMER"), or(ilike(user.name, pattern), ilike(user.email, pattern), ilike(user.phone, pattern)))).limit(8)
+          .from(user).where(and(eq(user.role, "CUSTOMER"), or(ilike(user.name, pattern), ilike(user.email, pattern), ilike(user.phone, pattern)))).limit(searchLimit)
           .then((rows) => rows.map((row) => ({ section: "Customers", title: row.name || row.email, detail: [row.email, row.phone].filter(Boolean).join(" · "), href: "/admin/customers" }))));
       }
 
       if (can(session.user.role, "discounts:write")) {
         searches.push(db.select({ id: coupon.id, code: coupon.code, campaignId: coupon.campaignId })
-          .from(coupon).where(or(ilike(coupon.code, pattern), ilike(coupon.campaignId, pattern))).limit(8)
+          .from(coupon).where(or(ilike(coupon.code, pattern), ilike(coupon.campaignId, pattern))).limit(searchLimit)
           .then((rows) => rows.map((row) => ({ section: "Coupons", title: row.code, detail: `Campaign ${row.campaignId}`, href: "/admin/coupons" }))));
         searches.push(db.select({ id: discount.id, name: discount.name })
-          .from(discount).where(ilike(discount.name, pattern)).limit(8)
+          .from(discount).where(ilike(discount.name, pattern)).limit(searchLimit)
           .then((rows) => rows.map((row) => ({ section: "Discounts", title: row.name, detail: "Store discount", href: "/admin/discounts" }))));
         searches.push(db.select({ id: offer.id, title: offer.title })
-          .from(offer).where(ilike(offer.title, pattern)).limit(8)
+          .from(offer).where(ilike(offer.title, pattern)).limit(searchLimit)
           .then((rows) => rows.map((row) => ({ section: "Offers", title: row.title, detail: "Store offer", href: "/admin/offers" }))));
       }
 
       if (can(session.user.role, "reviews:moderate")) {
         searches.push(db.select({ id: review.id, authorName: review.authorName, title: review.title, body: review.body })
-          .from(review).where(or(ilike(review.authorName, pattern), ilike(review.title, pattern), ilike(review.body, pattern))).limit(8)
+          .from(review).where(or(ilike(review.authorName, pattern), ilike(review.title, pattern), ilike(review.body, pattern))).limit(searchLimit)
           .then((rows) => rows.map((row) => ({ section: "Reviews", title: row.title || `Review by ${row.authorName}`, detail: row.body || row.authorName, href: "/admin/reviews" }))));
       }
 
       if (can(session.user.role, "newsletter:manage")) {
         searches.push(db.select({ id: newsletterSubscriber.id, email: newsletterSubscriber.email, isActive: newsletterSubscriber.isActive })
-          .from(newsletterSubscriber).where(ilike(newsletterSubscriber.email, pattern)).limit(8)
+          .from(newsletterSubscriber).where(ilike(newsletterSubscriber.email, pattern)).limit(searchLimit)
           .then((rows) => rows.map((row) => ({ section: "Newsletter", title: row.email, detail: row.isActive ? "Active subscriber" : "Unsubscribed", href: "/admin/newsletter" }))));
       }
 
       if (can(session.user.role, "analytics:read")) {
         searches.push(db.select({ id: emailLog.id, to: emailLog.to, subject: emailLog.subject, status: emailLog.status })
-          .from(emailLog).where(or(ilike(emailLog.to, pattern), ilike(emailLog.subject, pattern))).limit(8)
+          .from(emailLog).where(or(ilike(emailLog.to, pattern), ilike(emailLog.subject, pattern))).limit(searchLimit)
           .then((rows) => rows.map((row) => ({ section: "Email log", title: row.subject, detail: `${row.to} · ${row.status}`, href: "/admin/emails" }))));
       }
 
       if (can(session.user.role, "users:write")) {
         searches.push(db.select({ id: user.id, name: user.name, email: user.email, role: user.role })
-          .from(user).where(and(ne(user.role, "CUSTOMER"), or(ilike(user.name, pattern), ilike(user.email, pattern)))).limit(8)
+          .from(user).where(and(ne(user.role, "CUSTOMER"), or(ilike(user.name, pattern), ilike(user.email, pattern)))).limit(searchLimit)
           .then((rows) => rows.map((row) => ({ section: "Staff & roles", title: row.name || row.email, detail: `${row.email} · ${row.role}`, href: "/admin/users" }))));
       }
 
@@ -110,7 +115,21 @@ export default async function AdminSearchPage({ searchParams }: { searchParams: 
     }
   }
 
-  const sections = [...new Set(results.map((result) => result.section))];
+  const pageResults = results.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const hasNextPage = results.length > page * PAGE_SIZE;
+  if (page > 1 && pageResults.length === 0 && query.length >= 2 && !searchFailed) {
+    const lastAvailablePage = Math.max(1, Math.ceil(results.length / PAGE_SIZE));
+    const redirectParams = new URLSearchParams({ q: query });
+    if (lastAvailablePage > 1) redirectParams.set("page", String(lastAvailablePage));
+    redirect(`/admin/search?${redirectParams.toString()}`);
+  }
+  const firstResult = results.length === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
+  const sections = [...new Set(pageResults.map((result) => result.section))];
+  const pageHref = (target: number) => {
+    const pageParams = new URLSearchParams({ q: query });
+    if (target > 1) pageParams.set("page", String(target));
+    return `/admin/search?${pageParams.toString()}`;
+  };
   return (
     <div className="mx-auto max-w-5xl">
       <p className="section-label">Mini Street · Admin</p>
@@ -123,13 +142,13 @@ export default async function AdminSearchPage({ searchParams }: { searchParams: 
         <p className="mt-4 rounded-xl border border-[var(--border)] bg-white p-5 text-sm text-[var(--muted)]">No matching admin records found for “{query}”.</p>
       ) : (
         <>
-          <p className="mt-2 text-sm text-[var(--muted)]">Showing matches for “{query}” across {sections.length} {sections.length === 1 ? "section" : "sections"}.</p>
+          <p className="mt-2 text-sm text-[var(--muted)]">Showing matches {firstResult}–{firstResult + pageResults.length - 1} for “{query}” across {sections.length} {sections.length === 1 ? "section" : "sections"}.</p>
           <div className="mt-6 space-y-6">
             {sections.map((section) => (
               <section key={section}>
                 <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-[var(--muted)]">{section}</h2>
                 <ul className="divide-y divide-[var(--border)] rounded-xl border border-[var(--border)] bg-white shadow-soft">
-                  {results.filter((result) => result.section === section).map((result, index) => (
+                  {pageResults.filter((result) => result.section === section).map((result, index) => (
                     <li key={`${result.title}-${index}`}>
                       <Link href={result.href} className="admin-search-result flex flex-wrap items-center justify-between gap-3 px-4 py-3 hover:bg-[var(--brand-cream)]">
                         <span className="min-w-0">
@@ -144,6 +163,15 @@ export default async function AdminSearchPage({ searchParams }: { searchParams: 
               </section>
             ))}
           </div>
+          {(page > 1 || hasNextPage) && (
+            <nav aria-label="Search result pages" className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-[var(--border)] pt-5">
+              <p className="text-sm text-[var(--muted)]">Page {page}</p>
+              <div className="flex items-center gap-2">
+                {page > 1 ? <Link href={pageHref(page - 1)} className="inline-flex h-10 items-center rounded-[var(--radius-sm)] border border-[var(--border)] px-4 text-sm font-medium hover:border-[var(--brand-pink)] hover:text-[var(--brand-pink)]">Previous</Link> : <span className="inline-flex h-10 items-center rounded-[var(--radius-sm)] border border-[var(--border)] px-4 text-sm text-[var(--muted)] opacity-50">Previous</span>}
+                {hasNextPage ? <Link href={pageHref(page + 1)} className="inline-flex h-10 items-center rounded-[var(--radius-sm)] border border-[var(--border)] px-4 text-sm font-medium hover:border-[var(--brand-pink)] hover:text-[var(--brand-pink)]">Next</Link> : <span className="inline-flex h-10 items-center rounded-[var(--radius-sm)] border border-[var(--border)] px-4 text-sm text-[var(--muted)] opacity-50">Next</span>}
+              </div>
+            </nav>
+          )}
         </>
       )}
     </div>

@@ -89,7 +89,7 @@ export function ImageUpload({ imageUrls, onChange, onUploadingChange }: Props) {
             <li key={`${index}-${url}`} className="flex min-w-0 items-center gap-3 rounded-xl border border-[var(--border)] bg-white p-3">
               {url ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={url} alt="" className="size-14 shrink-0 rounded-lg border border-[var(--border)] object-cover" />
+                <img src={url} alt="" loading="lazy" decoding="async" className="size-14 shrink-0 rounded-lg border border-[var(--border)] object-cover" />
               ) : (
                 <span className="grid size-14 shrink-0 place-items-center rounded-lg bg-[var(--brand-cream)] text-[var(--muted)]">
                   <ImagePlus size={18} aria-hidden="true" />

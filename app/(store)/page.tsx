@@ -58,7 +58,7 @@ export default async function HomePage() {
       <section className="bg-white py-8 sm:py-11 lg:py-12">
         <div className="mx-auto max-w-7xl px-4 sm:px-8 lg:px-12">
           <div className="relative mb-5 text-center sm:mb-6">
-            <p className="section-label mb-1">Fresh from the boutique</p><h2 className="font-display text-3xl font-medium text-[var(--charcoal)] sm:text-4xl">New arrivals</h2><p className="mt-1 text-xs text-[var(--muted)] sm:text-sm">Meet your next little treasure.</p>
+            <p className="section-label mb-1">Fresh from the store</p><h2 className="font-display text-3xl font-medium text-[var(--charcoal)] sm:text-4xl">New arrivals</h2><p className="mt-1 text-xs text-[var(--muted)] sm:text-sm">Meet your next little treasure.</p>
             <Link href="/new-arrivals" className="link-premium absolute bottom-0 right-0 hidden items-center gap-1 text-xs font-medium text-[var(--brand-pink)] lg:inline-flex">View all <ArrowRight size={13} /></Link>
           </div>
           <ProductCollectionRow products={newArrivals} />

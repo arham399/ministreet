@@ -4,6 +4,7 @@ import { getDrizzleClient } from "@/lib/db/drizzle/client";
 import { category, categoryToDiscount, discount, discountProduct, product } from "@/lib/db/drizzle/schema";
 import { Button } from "@/components/ui/button";
 import { TablePagination } from "@/components/admin/table-pagination";
+import { DiscountDeleteButton } from "@/components/admin/discount-delete-button";
 
 export const metadata = { title: "Discounts | Admin" };
 const PAGE_SIZE = 25;
@@ -67,11 +68,12 @@ export default async function AdminDiscountsPage({ searchParams }: { searchParam
               <th className="px-4 py-3">Offer</th>
               <th className="px-4 py-3">Uses</th>
               <th className="px-4 py-3">Status</th>
+              <th className="px-4 py-3 text-right">Actions</th>
             </tr>
           </thead>
           <tbody>
             {discounts.length === 0 ? (
-              <tr><td colSpan={5} className="px-4 py-8 text-center text-[var(--muted)]">No discounts</td></tr>
+              <tr><td colSpan={6} className="px-4 py-8 text-center text-[var(--muted)]">No discounts</td></tr>
             ) : (
               discounts.map((d) => (
                 <tr key={d.id} className="border-b border-[var(--border)] last:border-0">
@@ -102,6 +104,9 @@ export default async function AdminDiscountsPage({ searchParams }: { searchParam
                           : d.usageLimit != null && d.usageCount >= d.usageLimit
                             ? "Limit reached"
                             : "Active"}
+                  </td>
+                  <td data-label="Actions" className="px-4 py-3 text-right">
+                    <DiscountDeleteButton id={d.id} name={d.name} usageCount={d.usageCount} />
                   </td>
                 </tr>
               ))
