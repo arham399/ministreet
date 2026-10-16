@@ -20,18 +20,24 @@ function AdminLoginForm() {
     setLoading(true);
     setError(null);
     const form = new FormData(e.currentTarget);
-    const res = await signIn("credentials", {
-      email: form.get("email"),
-      password: form.get("password"),
-      redirect: false,
-    });
-    if (res?.error) {
-      setError("Invalid credentials or not an admin account");
+    try {
+      const res = await signIn("credentials", {
+        email: form.get("email"),
+        password: form.get("password"),
+        redirect: false,
+      });
+      if (res?.error) {
+        setError("Invalid credentials or not an admin account");
+        return;
+      }
+      router.push(params.get("callbackUrl") || "/admin");
+      router.refresh();
+    } catch (error) {
+      console.error("Admin sign-in request failed:", error);
+      setError("Could not reach the sign-in service. Please try again.");
+    } finally {
       setLoading(false);
-      return;
     }
-    router.push(params.get("callbackUrl") || "/admin");
-    router.refresh();
   }
 
   return (
