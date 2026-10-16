@@ -1,12 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Search } from "lucide-react";
 
-export default function SearchPage() {
+function SearchForm() {
   const router = useRouter();
   const params = useSearchParams();
   const [q, setQ] = useState(params.get("q") || "");
@@ -33,5 +33,13 @@ export default function SearchPage() {
         <Button type="submit" className="w-full sm:w-auto">Search</Button>
       </form>
     </div>
+  );
+}
+
+export default function SearchPage() {
+  return (
+    <Suspense fallback={<p className="py-12 text-center text-sm text-[var(--muted)]">Loading…</p>}>
+      <SearchForm />
+    </Suspense>
   );
 }

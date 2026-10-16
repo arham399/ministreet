@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Eye, EyeOff } from "lucide-react";
@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import Image from "next/image";
 
-export default function AdminLoginPage() {
+function AdminLoginForm() {
   const router = useRouter();
   const params = useSearchParams();
   const [error, setError] = useState<string | null>(null);
@@ -87,5 +87,13 @@ export default function AdminLoginPage() {
         </form>
       </div>
     </div>
+  );
+}
+
+export default function AdminLoginPage() {
+  return (
+    <Suspense fallback={<p className="py-12 text-center text-sm text-[var(--muted)]">Loading…</p>}>
+      <AdminLoginForm />
+    </Suspense>
   );
 }
